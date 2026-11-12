@@ -66,6 +66,7 @@ export type ClosingCalculation = {
   perItem: {
     orderItemId: string;
     name: string;
+    unit: string;
     missingQty: number;
     damagedQty: number;
     goodQty: number;
@@ -99,6 +100,7 @@ export function calculateClosing(balances: ItemBalance[]): ClosingCalculation {
     perItem.push({
       orderItemId: b.orderItemId,
       name: b.name,
+      unit: b.unit,
       missingQty: b.qtyOpen,
       damagedQty: b.qtyDamaged,
       goodQty: b.qtyGood,

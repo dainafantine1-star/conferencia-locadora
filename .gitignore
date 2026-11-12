@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# banco local e uploads
+/.data/
+/storage/
+.scratch-img*
+
+# artefatos de teste locais
+/metricas.json
+/docs/*.jpg
+

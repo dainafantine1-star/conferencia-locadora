@@ -1,22 +1,40 @@
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { Pool } from "pg";
+import { PGlite } from "@electric-sql/pglite";
 import * as schema from "./schema";
+import path from "path";
+import fs from "fs";
 
-const globalForDb = globalThis as unknown as { __pgPool?: Pool };
+export type Db = ReturnType<typeof createDb>;
 
-function createPool() {
+const globalForDb = globalThis as unknown as {
+  __db?: unknown;
+  __pgPool?: Pool;
+  __pglite?: PGlite;
+};
+
+function createDb() {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL não definida");
+  if (connectionString) {
+    // Produção / Vercel (ex.: Neon) — Postgres real
+    const pool =
+      globalForDb.__pgPool ??
+      new Pool({ connectionString, max: 10, ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false } });
+    if (process.env.NODE_ENV !== "production") globalForDb.__pgPool = pool;
+    return drizzlePg(pool, { schema });
   }
-  return new Pool({
-    connectionString,
-    max: 10,
-  });
+
+  // Desenvolvimento local embutida — sem Docker
+  const dataDir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
+  fs.mkdirSync(dataDir, { recursive: true });
+  const pglite = globalForDb.__pglite ?? new PGlite(dataDir);
+  if (process.env.NODE_ENV !== "production") globalForDb.__pglite = pglite;
+  return drizzlePglite(pglite, { schema });
 }
 
-export const pool = globalForDb.__pgPool ?? createPool();
-if (process.env.NODE_ENV !== "production") globalForDb.__pgPool = pool;
+export const db = createDb();
 
-export const db = drizzle(pool, { schema });
-export type Db = typeof db;
+export function isEmbedded(): boolean {
+  return !process.env.DATABASE_URL;
+}

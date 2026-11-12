@@ -23,6 +23,7 @@ export const billingStatusEnum = pgEnum("billing_status", [
   "recebida",
   "dispensada",
 ]);
+export const labelKindEnum = pgEnum("label_kind", ["unidade", "caixa"]);
 
 const now = () => sql`now()`;
 
@@ -99,6 +100,33 @@ export const catalogItems = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
   },
   (t) => [index("catalog_items_company_idx").on(t.companyId)],
+);
+
+/**
+ * Etiquetas para bipagem (QR/código de barras).
+ * - unidade: 1 código por peça física; cada bipagem conta 1
+ * - caixa: 1 código por caixa/kit; cada bipagem conta `qty` unidades
+ */
+export const scanLabels = pgTable(
+  "scan_labels",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    catalogItemId: uuid("catalog_item_id")
+      .notNull()
+      .references(() => catalogItems.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    kind: labelKindEnum("kind").notNull().default("unidade"),
+    qty: integer("qty").notNull().default(1),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+  },
+  (t) => [
+    uniqueIndex("scan_labels_company_code_key").on(t.companyId, t.code),
+    index("scan_labels_catalog_idx").on(t.catalogItemId),
+  ],
 );
 
 // --- Pedidos ---
@@ -359,6 +387,14 @@ export const billingEventsRelations = relations(billingEvents, ({ one }) => ({
   order: one(orders, { fields: [billingEvents.orderId], references: [orders.id] }),
 }));
 
+export const scanLabelsRelations = relations(scanLabels, ({ one }) => ({
+  company: one(companies, { fields: [scanLabels.companyId], references: [companies.id] }),
+  catalogItem: one(catalogItems, {
+    fields: [scanLabels.catalogItemId],
+    references: [catalogItems.id],
+  }),
+}));
+
 export type Company = typeof companies.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
@@ -371,3 +407,4 @@ export type ReturnItem = typeof returnItems.$inferSelect;
 export type Attachment = typeof attachments.$inferSelect;
 export type Closure = typeof closures.$inferSelect;
 export type BillingEvent = typeof billingEvents.$inferSelect;
+export type ScanLabel = typeof scanLabels.$inferSelect;

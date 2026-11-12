@@ -1,7 +1,6 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 import { db } from "@/lib/db";
-import { memberships, users, companies } from "@/lib/db/schema";
+import { orders } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export type SessionUser = {
@@ -23,9 +22,17 @@ export class AuthError extends Error {
 }
 
 export async function requireSession(): Promise<{ user: SessionUser }> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const raw = session?.user as
-    | { id?: string; companyId?: string; role?: string }
+    | {
+        id?: string;
+        companyId?: string;
+        role?: string;
+        companyName?: string;
+        timezone?: string;
+        email?: string;
+        name?: string;
+      }
     | undefined;
   if (!session?.user || !raw?.id || !raw?.companyId || !raw?.role) {
     throw new AuthError("Não autenticado", 401);
@@ -33,12 +40,12 @@ export async function requireSession(): Promise<{ user: SessionUser }> {
   return {
     user: {
       id: raw.id,
-      email: session.user.email ?? "",
-      name: session.user.name ?? "",
+      email: raw.email ?? "",
+      name: raw.name ?? "",
       companyId: raw.companyId,
-      companyName: (session.user as { companyName?: string }).companyName ?? "",
+      companyName: raw.companyName ?? "",
       role: raw.role as "gestor" | "operador",
-      timezone: (session.user as { timezone?: string }).timezone ?? "America/Bahia",
+      timezone: raw.timezone ?? "America/Bahia",
     },
   };
 }
@@ -53,7 +60,6 @@ export async function requireGestor(): Promise<{ user: SessionUser }> {
 
 /** Garante que o pedido pertence à empresa da sessão. */
 export async function assertOrderAccess(orderId: string, user: SessionUser) {
-  const { orders } = await import("@/lib/db/schema");
   const [order] = await db
     .select()
     .from(orders)
