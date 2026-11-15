@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -23,6 +24,7 @@ export async function POST(
 ) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "returns", "edit");
     const { id } = await params;
     const order = await assertOrderAccess(id, user);
     if (order.status === "encerrado") throw new Error("Pedido encerrado");

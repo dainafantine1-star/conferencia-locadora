@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { logisticsTasks, orders, memberships, users, orderItems, returns, returnItems } from "@/lib/db/schema";
@@ -9,12 +10,14 @@ const taskSchema = z.object({ orderId: uuid, kind: z.enum(["entrega", "coleta"])
   address: z.string().trim().min(5).max(2000), contact: z.string().max(200).default(""),
   assigneeId: uuid.nullable().optional(), vehicle: z.string().max(100).default(""), notes: z.string().max(3000).default("") });
 export async function logisticsData(user: SessionUser) {
+  await assertFeature(user, "returns", "view");
   const rows = await db.select({ task: logisticsTasks, orderNumber: orders.number, eventName: orders.eventName, assignee: users.name })
     .from(logisticsTasks).innerJoin(orders, eq(orders.id, logisticsTasks.orderId)).leftJoin(users, eq(users.id, logisticsTasks.assigneeId))
     .where(eq(logisticsTasks.companyId, user.companyId)).orderBy(asc(logisticsTasks.scheduledAt));
   return { tasks: rows.map(r => ({ ...r.task, orderNumber: r.orderNumber, eventName: r.eventName, assignee: r.assignee })) };
 }
 export async function createLogisticsTask(user: SessionUser, input: unknown) {
+  await assertFeature(user, "returns", "create");
   const data = taskSchema.parse(input);
   return db.transaction(async tx => {
     const [order] = await tx.select().from(orders).where(and(eq(orders.id, data.orderId), eq(orders.companyId, user.companyId))).for("update");
@@ -30,6 +33,7 @@ export async function createLogisticsTask(user: SessionUser, input: unknown) {
   });
 }
 export async function updateLogisticsTask(user: SessionUser, input: unknown) {
+  await assertFeature(user, "returns", "edit");
   const data = z.object({ id: uuid, status: z.enum(["em_rota", "concluida", "cancelada"]), notes: z.string().max(3000).optional() }).parse(input);
   return db.transaction(async tx => {
     const [task] = await tx.select().from(logisticsTasks).where(and(eq(logisticsTasks.id, data.id), eq(logisticsTasks.companyId, user.companyId))).for("update");

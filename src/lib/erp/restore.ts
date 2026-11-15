@@ -1,5 +1,5 @@
 import type { BackupPayload } from "./backup-format";
-export const restoreOrder = ["companies", "users", "memberships", "customers", "catalog_items", "scan_labels", "agenda_slots", "suppliers", "orders", "order_items", "returns", "return_items", "attachments", "closures", "billing_events", "audit_log", "company_settings", "stock_movements", "rental_documents", "financial_entries", "settlements", "commissions", "logistics_tasks", "store_pages", "store_leads", "message_log", "holidays", "payment_checkouts", "ai_settings", "ai_agents", "ai_knowledge", "ai_threads", "ai_messages", "ai_actions", "ai_runs", "ai_rules", "ai_jobs", "ai_deliveries", "fiscal_settings", "fiscal_invoices", "fiscal_deliveries"];
+export const restoreOrder = ["companies", "users", "memberships", "customers", "catalog_items", "scan_labels", "agenda_slots", "suppliers", "orders", "order_items", "returns", "return_items", "attachments", "closures", "billing_events", "audit_log", "company_settings", "stock_movements", "rental_documents", "financial_entries", "settlements", "commissions", "logistics_tasks", "store_pages", "store_leads", "message_log", "holidays", "payment_checkouts", "ai_settings", "ai_agents", "ai_knowledge", "ai_threads", "ai_messages", "ai_actions", "ai_runs", "ai_rules", "ai_jobs", "ai_deliveries", "fiscal_settings", "fiscal_invoices", "fiscal_deliveries", "saas_subscriptions", "company_invites", "product_records", "checkin_records", "venue_bookings", "client_portals", "document_visits", "company_domains"];
 type Query = (query: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
 const quoted = (v: string) => `"${v.replaceAll('"', '""')}"`;
 export async function restoreTables(payload: BackupPayload, query: Query) {
@@ -20,6 +20,7 @@ export async function restoreTables(payload: BackupPayload, query: Query) {
         await query(`insert into ${quoted(table)} (${keys.map(quoted).join(",")}) values (${keys.map((_, i) => `$${i + 1}`).join(",")})`, params);
       }
     }
+    await query("WITH ranked AS (SELECT id, row_number() OVER (PARTITION BY company_id ORDER BY created_at,id) n FROM memberships m WHERE role = 'gestor' AND NOT EXISTS (SELECT 1 FROM memberships o WHERE o.company_id = m.company_id AND o.account_role = 'owner' AND o.active)) UPDATE memberships m SET account_role = CASE WHEN r.n = 1 THEN 'owner' ELSE 'admin' END FROM ranked r WHERE m.id = r.id");
     await query("COMMIT");
   } catch (error) { await query("ROLLBACK"); throw error; }
   return { tables: restoreOrder.length, rows: Object.values(payload.tables).reduce((sum, rows) => sum + rows.length, 0) };

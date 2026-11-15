@@ -1,10 +1,11 @@
+import { assertFeature } from "@/lib/saas/access";
 import type { SessionUser } from "@/lib/auth/session";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { orders, orderItems, customers, catalogItems, companies } from "@/lib/db/schema";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { periodAvailability } from "@/lib/erp/inventory";
-import { fail } from "@/lib/erp/common";
+import { fail, type Tx } from "@/lib/erp/common";
 
 const createSchema = z.object({
   customerId: z.string().uuid(),
@@ -27,16 +28,17 @@ const createSchema = z.object({
 });
 
 
-export async function createRentalOrder(user: SessionUser, input: unknown) {
+export async function createRentalOrder(user: SessionUser, input: unknown, executor?: Tx) {
+  if (!executor) await assertFeature(user, "events", "create");
     const body = createSchema.parse(input);
 
-    const [customer] = await db
+    const [customer] = await (executor ?? db)
       .select()
       .from(customers)
       .where(and(eq(customers.id, body.customerId), eq(customers.companyId, user.companyId)));
     if (!customer) throw new Error("Cliente não encontrado");
 
-    const order = await db.transaction(async (tx) => {
+    const create = async (tx: Tx) => {
       // Serialize numbering within the company, including simultaneous requests.
       await tx.select({ id: companies.id }).from(companies)
         .where(eq(companies.id, user.companyId)).for("update");
@@ -86,7 +88,8 @@ export async function createRentalOrder(user: SessionUser, input: unknown) {
       );
 
       return created;
-    });
+    };
+    const order = executor ? await create(executor) : await db.transaction(create);
 
     return { order };
 }

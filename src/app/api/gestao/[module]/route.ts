@@ -8,7 +8,7 @@ import { handle, jsonError } from "@/lib/api/http";
 import { fail, csv, uuid } from "@/lib/erp/common";
 import { supplierData, saveSupplier } from "@/lib/erp/contacts";
 import { inventoryData, moveStock } from "@/lib/erp/inventory";
-import { commercialData, createQuote, reviseQuote, convertToContract, cancelDocument, shareDocument } from "@/lib/erp/commercial";
+import { commercialData, createQuote, reviseQuote, convertToContract, cancelDocument, shareDocument, reserveQuote, releaseQuote } from "@/lib/erp/commercial";
 import { financeData, createFinancialEntry, settleEntry, cancelEntry, commissionData, payCommission, importConference } from "@/lib/erp/finance";
 import { logisticsData, createLogisticsTask, updateLogisticsTask } from "@/lib/erp/logistics";
 import { settingsData, saveSettings } from "@/lib/erp/settings";
@@ -19,6 +19,8 @@ import { reportData } from "@/lib/erp/reports";
 import { sendDocument, createCheckout, requestSignature, syncSignature, testSmtp } from "@/lib/erp/integrations";
 import { rentalPdf, receiptPdf } from "@/lib/erp/pdf";
 import { teamData, createMember, updateMember } from "@/lib/erp/team";
+import { allowedAction, entitlement } from "@/lib/saas/access";
+import type { FeatureId } from "@/lib/saas/catalog";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ module: string }> };
@@ -53,6 +55,8 @@ export async function GET(req: NextRequest, context: Context) {
     let data: unknown;
     switch (module) {
       case "opcoes": {
+        const { plan } = await entitlement(user.companyId);
+        const visible = (feature: FeatureId) => plan.features[feature] && allowedAction(user, feature, "view");
         const [clients, products, team, jobs] = await Promise.all([
           db.select().from(customers).where(eq(customers.companyId, user.companyId)).orderBy(customers.name),
           db.select().from(catalogItems).where(eq(catalogItems.companyId, user.companyId)).orderBy(catalogItems.name),
@@ -60,7 +64,10 @@ export async function GET(req: NextRequest, context: Context) {
             .where(and(eq(memberships.companyId, user.companyId), eq(users.active, true))),
           db.select({ id: orders.id, number: orders.number, eventName: orders.eventName, status: orders.status }).from(orders).where(eq(orders.companyId, user.companyId)).orderBy(desc(orders.createdAt)),
         ]);
-        data = { customers: clients, products, team, orders: jobs, role: user.role, permissions: user.permissions ?? [], timezone: user.timezone }; break;
+        // Related forms receive only selector fields when the full module is not available.
+        data = { customers: visible("customers") ? clients : ["proposals", "finance", "events", "weekly", "responsibles"].some(f => visible(f as FeatureId)) ? clients.map(c => ({ id: c.id, name: c.name, active: c.active })) : [],
+          products: visible("inventory") ? products : visible("proposals") ? products.map(p => ({ id: p.id, name: p.name, unit: p.unit, active: p.active, rentalPriceCents: p.rentalPriceCents, priceUnit: p.priceUnit })) : [],
+          team, orders: ["events", "returns", "venues", "checkin", "weekly"].some(f => visible(f as FeatureId)) ? jobs : [], role: user.role, permissions: user.permissions ?? [], timezone: user.timezone }; break;
       }
       case "fornecedores": data = await supplierData(user); break;
       case "equipe": data = await teamData(user); break;
@@ -100,6 +107,8 @@ export async function POST(req: NextRequest, context: Context) {
       case "equipe": return action === "atualizar" ? updateMember(user, body) : createMember(user, body);
       case "estoque": return moveStock(user, body);
       case "comercial":
+        if (action === "reservar") return reserveQuote(user, body);
+        if (action === "liberar_reserva") return releaseQuote(user, body);
         if (action === "revisar") return reviseQuote(user, body);
         if (action === "contratar") return convertToContract(user, body);
         if (action === "cancelar") return cancelDocument(user, body);

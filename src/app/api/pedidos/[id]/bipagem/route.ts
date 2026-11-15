@@ -5,6 +5,7 @@ import { scanLabels, orderItems, orders } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireSession, assertOrderAccess, AuthError } from "@/lib/auth/session";
 import { handle } from "@/lib/api/http";
+import { assertFeature } from "@/lib/saas/access";
 
 const schema = z.object({
   code: z.string().min(1),
@@ -23,6 +24,7 @@ export async function POST(
 ) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "returns", "view");
     const { id } = await params;
     const order = await assertOrderAccess(id, user);
     const body = schema.parse(await req.json());

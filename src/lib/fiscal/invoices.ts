@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { and, eq, desc, sql, getTableColumns } from "drizzle-orm";
@@ -53,6 +54,7 @@ export async function invoiceDetail(user: SessionUser, id: string) {
 const saveSchema = z.object({ id: uuid.optional(), revision: z.number().int().positive().optional(), requestKey: z.string().min(16).max(120), draft: draftSchema }).strict();
 export async function saveDraft(user: SessionUser, input: unknown) {
   user = await fiscalAccess(user); const data = saveSchema.parse(input), c = await fiscalConfig(user.companyId);
+  await assertFeature(user, "invoices", data.id ? "edit" : "create");
   const [customer] = await db.select().from(customers).where(and(eq(customers.id, data.draft.customerId), eq(customers.companyId, user.companyId), eq(customers.active, true)));
   if (!customer) fail("Cliente não pertence à empresa ou está inativo", 404);
   if (data.draft.orderId) {
@@ -86,6 +88,7 @@ export async function saveDraft(user: SessionUser, input: unknown) {
   });
 }
 export async function issueInvoice(user: SessionUser, input: unknown) {
+  await assertFeature(user, "invoices", "create");
   user = await fiscalAccess(user);
   const data = z.object({ id: uuid, revision: z.number().int().positive(), confirmation: z.literal("EMITIR") }).strict().parse(input);
   const c = await fiscalConfig(user.companyId);
@@ -134,6 +137,7 @@ async function applyResult(user: SessionUser, row: InvoiceRow, response: Record<
   });
 }
 export async function syncInvoice(user: SessionUser, input: unknown) {
+  await assertFeature(user, "invoices", "view");
   user = await fiscalAccess(user); const { id } = z.object({ id: uuid }).strict().parse(input), row = await findInvoice(user, id);
   if (row.status === "rascunho") fail("Este rascunho ainda não foi enviado para emissão", 409);
   if (row.status === "enviando" && row.submittedAt && Date.now() - row.submittedAt.getTime() < 30000) fail("Aguarde o término da solicitação de emissão antes de consultar", 409);

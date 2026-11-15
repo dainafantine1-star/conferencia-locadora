@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { createRentalOrder } from "@/lib/erp/orders";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
@@ -9,6 +10,7 @@ import { handle } from "@/lib/api/http";
 export async function GET(req: NextRequest) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "returns", "view");
     const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
 
     let rows;
@@ -68,6 +70,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "events", "view");
     return createRentalOrder(user, await req.json());
   });
 }

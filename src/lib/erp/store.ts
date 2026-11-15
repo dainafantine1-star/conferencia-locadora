@@ -1,3 +1,4 @@
+import { assertFeature, assertPlan } from "@/lib/saas/access";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
@@ -47,6 +48,7 @@ export async function submitLead(slug: string, input: unknown) {
   if (data.website) fail("Solicitação não aceita");
   const store = await publicStore(slug);
   const products = new Set(store.products.map(p => p.id));
+  await assertPlan(store.companyId, "sites", "create");
   if (data.items.some(p => !products.has(p.catalogItemId))) fail("Produto indisponível nesta loja");
   if (data.eventDate && data.eventDate < localDay()) fail("Escolha uma data atual ou futura");
   const { requestKey, kind, name, email, phone, message, eventDate, returnDueDate, items } = data;
@@ -57,6 +59,7 @@ export async function submitLead(slug: string, input: unknown) {
   return { received: true, protocol: existing.id };
 }
 export async function storeData(user: SessionUser) {
+  await assertFeature(user, "sites", "view");
   const [pages, leads] = await Promise.all([
     db.select().from(storePages).where(eq(storePages.companyId, user.companyId)).orderBy(storePages.title),
     db.select().from(storeLeads).where(eq(storeLeads.companyId, user.companyId)).orderBy(desc(storeLeads.createdAt)),
@@ -64,6 +67,7 @@ export async function storeData(user: SessionUser) {
   return { pages, leads };
 }
 export async function savePage(user: SessionUser, input: unknown) {
+  await assertFeature(user, "sites", "edit");
   const data = z.object({ id: uuid.optional(), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80),
     title: z.string().trim().min(1).max(200), content: z.string().max(50000), published: z.boolean() }).parse(input);
   return db.transaction(async tx => {
@@ -79,12 +83,14 @@ export async function savePage(user: SessionUser, input: unknown) {
   });
 }
 export async function updateLead(user: SessionUser, input: unknown) {
+  await assertFeature(user, "sites", "edit");
   const data = z.object({ id: uuid, status: z.enum(["em_atendimento", "concluido", "arquivado"]) }).parse(input);
   const [lead] = await db.update(storeLeads).set({ status: data.status }).where(and(eq(storeLeads.id, data.id), eq(storeLeads.companyId, user.companyId))).returning();
   if (!lead) fail("Solicitação não encontrada", 404);
   return { lead };
 }
 export async function quoteFromLead(user: SessionUser, input: unknown) {
+  await assertFeature(user, "proposals", "create");
   const { id } = z.object({ id: uuid }).parse(input);
   return db.transaction(async tx => {
     await lockCompany(tx, user.companyId);
@@ -125,6 +131,7 @@ export async function sharedDocument(token: string) {
   };
 }
 export async function acceptSharedQuote(token: string) {
+  const linked = await sharedDocument(token); await assertPlan(linked.companyId, "proposals", "edit");
   const doc = await sharedDocument(token);
   if (doc.kind !== "orcamento" || !["rascunho", "enviado", "aceito"].includes(doc.status)) fail("Proposta indisponível para aceite");
   if (doc.validUntil && doc.validUntil < localDay()) fail("Proposta expirada");

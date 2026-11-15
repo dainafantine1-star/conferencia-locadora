@@ -3,12 +3,8 @@ import { requireSession, AuthError } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { attachments } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import path from "path";
-import fs from "fs";
-
-function storageRoot(): string {
-  return path.resolve(process.env.STORAGE_DIR ?? path.join(process.cwd(), "storage"));
-}
+import { getPrivateFile } from "@/lib/storage";
+import { assertFeature } from "@/lib/saas/access";
 
 /** Serve foto com validação de tenant no servidor. */
 export async function GET(
@@ -17,6 +13,7 @@ export async function GET(
 ) {
   try {
     const { user } = await requireSession();
+    await assertFeature(user, "returns");
     const { path: parts } = await params;
     const storedName = parts[parts.length - 1];
     if (!storedName || storedName.includes("..")) {
@@ -31,12 +28,7 @@ export async function GET(
       return Response.json({ error: "Não encontrado" }, { status: 404 });
     }
 
-    const fullPath = path.join(storageRoot(), user.companyId, storedName);
-    if (!fs.existsSync(fullPath)) {
-      return Response.json({ error: "Arquivo ausente" }, { status: 404 });
-    }
-
-    const data = fs.readFileSync(fullPath);
+    const data = await getPrivateFile(user.companyId, storedName);
     return new Response(new Uint8Array(data), {
       headers: {
         "Content-Type": att.mime,

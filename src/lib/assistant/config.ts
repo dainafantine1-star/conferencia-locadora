@@ -1,3 +1,6 @@
+import { allowedAction } from "@/lib/saas/access";
+import { permissionFeature } from "@/lib/saas/catalog";
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq, sql } from "drizzle-orm";
 import { db, isEmbedded } from "@/lib/db";
@@ -23,7 +26,9 @@ const saveSchema = z.object({ preferences: prefsSchema.optional(),
   removeSecrets: z.array(z.enum(aiSecretKeys)).optional(),
 }).strict();
 export function allowed(user: SessionUser, permission: string) {
-  return user.role === "gestor" || user.permissions?.includes(permission as never) === true;
+  if (permission === "gestor") return user.role === "gestor";
+  const feature = permissionFeature[permission];
+  return feature ? allowedAction(user, feature, "view") : user.role === "gestor" || user.permissions?.includes(permission as never) === true;
 }
 export function assertAllowed(user: SessionUser, permission: string) { if (!allowed(user, permission)) fail("Seu perfil não tem permissão para esta operação", 403); }
 export async function aiConfig(companyId: string) {
@@ -40,6 +45,7 @@ export function wahaBase(value: string | undefined) {
   return url.origin;
 }
 export async function configurationData(user: SessionUser) {
+  await assertFeature(user, "attendance", "view");
   assertAllowed(user, "gestor");
   const c = await aiConfig(user.companyId);
   const [usage] = await db.select({ runs: sql<number>`count(*)::int`, input: sql<number>`coalesce(sum(${aiRuns.inputTokens}),0)::float8`, output: sql<number>`coalesce(sum(${aiRuns.outputTokens}),0)::float8` })
@@ -52,6 +58,7 @@ export async function configurationData(user: SessionUser) {
     webhookPath: `/api/atendimento/webhook/${user.companyId}` };
 }
 export async function saveConfiguration(user: SessionUser, input: unknown) {
+  await assertFeature(user, "attendance", "edit");
   assertAllowed(user, "gestor"); const data = saveSchema.parse(input);
   await db.transaction(async tx => {
     await lockCompany(tx, user.companyId);

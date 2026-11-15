@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 import * as schema from "@/lib/db/schema";
 import { dayAvailability } from "@/lib/business/availability";
 
-const auth = vi.hoisted(() => ({ companyId: "00000000-0000-4000-8000-000000000001", role: "gestor" }));
+const auth = vi.hoisted(() => ({ id: "", companyId: "00000000-0000-4000-8000-000000000001", role: "gestor" }));
 vi.mock("@/lib/auth/session", () => {
   class AuthError extends Error { constructor(message: string, public status = 401) { super(message); } }
   return { AuthError, requireSession: async () => ({ user: auth }), requireGestor: async () => {
@@ -33,6 +33,8 @@ beforeAll(async () => {
   for (const file of readdirSync("drizzle").filter((f) => f.endsWith(".sql")).sort()) await client.exec(readFileSync(`drizzle/${file}`, "utf8"));
   await db.insert(schema.companies).values([{ id: first, name: "A" }, { id: second, name: "B" }]);
   const [user] = await db.insert(schema.users).values({ name: "Teste", email: "test@example.com", passwordHash: "test" }).returning();
+  auth.id = user.id;
+  await db.insert(schema.memberships).values([{ userId: user.id, companyId: first, role: "gestor" }, { userId: user.id, companyId: second, role: "gestor" }]);
   const [customer] = await db.insert(schema.customers).values({ companyId: first, name: "Cliente" }).returning();
   const [item] = await db.insert(schema.catalogItems).values({ companyId: first, name: "Taça", unit: "un", stockQty: 100, replacementCents: 100 }).returning();
   itemId = item.id;

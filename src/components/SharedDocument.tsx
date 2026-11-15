@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { sharedDocument } from "@/lib/erp/store";
 import { Card, Button, money, Badge } from "./ui";
 import { request, Download, dateLabel, Actions, Check } from "./management/shared";
 export function SharedDocument({ document: doc, token }: { document: Awaited<ReturnType<typeof sharedDocument>>; token: string }) {
+  useEffect(() => { if (document.visibilityState === "visible") void fetch(`/api/documento/${token}/visita`, { method: "POST", keepalive: true }).catch(() => undefined); }, [token]);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState(""), [consent, setConsent] = useState(false), [accepted, setAccepted] = useState(doc.status === "aceito");
   async function act(body: unknown) { setBusy(true); setError(""); try { const result = await request<{ message?: string; checkout?: { url: string } }>(`/api/documento/${token}`, body); if (result.checkout?.url) window.location.assign(result.checkout.url); else { setMessage(result.message ?? "Solicitação registrada"); setAccepted(true); } } catch (e) { setError(e instanceof Error ? e.message : "Falha"); } finally { setBusy(false); } }
   return <main className="mx-auto max-w-3xl space-y-5 p-5 sm:p-8"><p className="text-sm font-semibold text-action">{doc.companyName}</p><h1 className="text-3xl font-bold">{doc.kind === "contrato" ? "Contrato" : "Orçamento"} #{doc.number}</h1><Badge status={doc.status} />{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}{message && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{message}</p>}<Card><h2 className="font-semibold">{doc.eventName}</h2><p className="mt-2 text-sm">{doc.customerName} · {dateLabel(doc.eventDate)} a {dateLabel(doc.returnDueDate)}</p>{doc.validUntil && <p className="text-sm">Proposta válida até {dateLabel(doc.validUntil)}</p>}</Card>

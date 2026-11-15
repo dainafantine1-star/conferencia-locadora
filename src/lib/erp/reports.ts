@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { db } from "@/lib/db";
 import { orders, rentalDocuments, settlements, financialEntries } from "@/lib/db/schema";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
@@ -7,6 +8,7 @@ import { inventoryData } from "./inventory";
 import { day, localDay, fail } from "./common";
 
 export async function reportData(user: SessionUser, query: URLSearchParams) {
+  await assertFeature(user, "reports", "financial");
   const end = day.parse(query.get("end") ?? localDay(user.timezone));
   const start = day.parse(query.get("start") ?? `${end.slice(0, 7)}-01`);
   if (start > end) fail("Período inválido");

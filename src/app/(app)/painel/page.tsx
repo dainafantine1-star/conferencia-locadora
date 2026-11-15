@@ -14,7 +14,7 @@ type Metrics = {
     atrasados: number;
     hoje: number;
   };
-  revenue: { pendente: number; recebida: number; dispensada: number; sugerido: number };
+  revenue: { pendente: number; recebida: number; dispensada: number; sugerido: number } | null;
   returnsSeries: { day: string; devolucoes: number; unidades: number }[];
   weeksSeries: { week: string; pedidos: number }[];
   statusSeries: { name: string; value: number }[];
@@ -27,7 +27,7 @@ type Metrics = {
     start: string;
     due: string;
     status: string;
-    billing: string;
+    billing: string | null;
   }[];
   topItems: { name: string; entregues: number; devolvidos: number; avariados: number }[];
 };
@@ -38,7 +38,7 @@ export default function PainelPage() {
 
   useEffect(() => {
     fetch("/api/metricas")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Falha ao carregar"))))
+      .then(async (r) => { const body = await r.json(); if (!r.ok) throw new Error(body.error || "Falha ao carregar"); return body; })
       .then(setData)
       .catch((e) => setError(e.message));
   }, []);
@@ -80,17 +80,17 @@ export default function PainelPage() {
         <Kpi label="Retornos hoje" value={data.kpi.hoje} accent />
         <Kpi label="Atrasados" value={data.kpi.atrasados} danger={data.kpi.atrasados > 0} />
         <Kpi label="Em aberto" value={data.kpi.abertos} />
-        <Kpi label="Cobrança pendente" value={data.billingSeries.find((b) => b.name === "Pendente")?.value ?? 0} />
+        {data.revenue && <Kpi label="Cobrança pendente" value={data.billingSeries.find((b) => b.name === "Pendente")?.value ?? 0} />}
       </div>
 
       {/* Valores */}
-      <h2 className="text-sm font-semibold text-slate-600">Cobranças de conferência · reposição e avarias</h2>
+      {data.revenue && <><h2 className="text-sm font-semibold text-slate-600">Cobranças de conferência · reposição e avarias</h2>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Money label="A receber" cents={data.revenue.pendente} tone="amber" />
         <Money label="Recebido líquido" cents={data.revenue.recebida} tone="green" />
         <Money label="Dispensado" cents={data.revenue.dispensada} tone="slate" />
         <Money label="Sugerido total" cents={data.revenue.sugerido} tone="ink" />
-      </div>
+      </div></>}
 
       {/* Destaque — próximos eventos (card de acento ref2) */}
       <Card accent>
@@ -148,13 +148,13 @@ export default function PainelPage() {
         </Card>
         <Card>
           <h2 className="mb-1 font-black">Cobranças</h2>
-          <DonutChart
+          {data.revenue ? <DonutChart
             data={
               data.billingSeries.length > 0
                 ? data.billingSeries
                 : [{ name: "Sem dados", value: 1 }]
             }
-          />
+          /> : <p className="text-sm text-slate-500">A consulta financeira depende da permissão do seu perfil e do plano da empresa.</p>}
         </Card>
       </div>
 

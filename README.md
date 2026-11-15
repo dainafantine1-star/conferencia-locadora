@@ -4,6 +4,8 @@ Sistema integrado de locações para eventos, com conferência de saída/devolu�
 
 Consulte o [guia de operação e configuração](docs/OPERACAO-DETALI.md), o [relatório funcional](docs/STATUS-FUNCIONAL.md) e a [identidade visual](docs/branding/IMPLEMENTACAO.md). As integrações externas exigem credenciais e homologação. Nenhum pagamento, envio ou assinatura é confirmado por simulação.
 
+A [base SaaS](docs/SAAS-DETALI.md) acrescenta cadastro da empresa, proprietário, convites, troca de conta, permissões por ação, catálogo de recursos, planos Essencial/Plus e painel administrativo separado da Detali. O catálogo informa o que está completo ou parcial. A atribuição de assinaturas é manual; não realiza cobrança recorrente.
+
 O **assistente no canto da tela** oferece ajuda de navegação e, com IA configurada, consultas e comandos com confirmação. **Atendimento e agentes**, no menu lateral, reúne WhatsApp oficial/WAHA, agentes, conhecimento e automações. Consulte o [guia do assistente, atendimento e Supabase](docs/ASSISTENTE-E-ATENDIMENTO.md) para configurar os provedores, o worker e a migração do banco.
 
 O módulo **Notas fiscais** prepara e solicita NF-e de produtos/remessas, consulta a autorização, baixa DANFE em PDF e XML e envia o PDF pelo WhatsApp do CRM. A emissão real exige configuração da empresa, certificado/credenciamento no provedor e tributação revisada pelo contador. Consulte o [guia fiscal](docs/NOTAS-FISCAIS.md).

@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { and, eq, sql, inArray } from "drizzle-orm";
@@ -110,6 +111,7 @@ export async function ingestWebhook(companyId: string, raw: string, headers: Hea
 }
 class SendFailure extends Error { constructor(public definitive: boolean) { super("O serviço de WhatsApp não confirmou o envio"); } }
 export async function sendWhatsApp(user: SessionUser, input: unknown, automatic = false) {
+  await assertFeature(user, "attendance", "edit");
   if (!automatic) assertAllowed(user, "atendimento");
   const data = z.object({ threadId: uuid, text: z.string().trim().min(1).max(3000), requestKey: z.string().min(16).max(160), draftId: uuid.optional() }).strict().parse(input);
   const c = await aiConfig(user.companyId); const p = c.preferences; const provider = p.whatsappProvider ?? "meta";

@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { decodeBackup } from "../src/lib/erp/backup-format";
 import { restoreTables } from "../src/lib/erp/restore";
+import { postgresOptions } from "../src/lib/db/postgres-options";
 config({ path: ".env.local", quiet: true }); config({ quiet: true });
 async function main() {
   const [file, storageDirectory] = process.argv.slice(2);
@@ -20,7 +21,7 @@ async function main() {
     try { await access(filename); throw new Error("Há fotos existentes no destino. Use um diretório novo."); }
     catch (e) { if (!(e && typeof e === "object" && "code" in e && e.code === "ENOENT")) throw e; }
   }
-  const client = new Client({ connectionString: process.env.TARGET_DATABASE_URL }); await client.connect();
+  const client = new Client(postgresOptions(process.env.TARGET_DATABASE_URL)); await client.connect();
   try {
     const exists = await client.query("select to_regclass('public.companies') as companies, to_regclass('public.users') as users");
     for (const table of ["companies", "users"]) if (exists.rows[0][table]) {

@@ -11,6 +11,7 @@ import {
 import { eq, and, sql, desc, gte } from "drizzle-orm";
 import { requireSession } from "@/lib/auth/session";
 import { handle } from "@/lib/api/http";
+import { dashboardVisibility } from "@/lib/saas/dashboard";
 
 function localDateInTz(tz: string, d = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -30,6 +31,7 @@ function daysAgo(n: number): Date {
 export async function GET() {
   return handle(async () => {
     const { user } = await requireSession();
+    const visibility = await dashboardVisibility(user);
     const tz = user.timezone;
     const today = localDateInTz(tz);
     const since = daysAgo(29);
@@ -89,7 +91,7 @@ export async function GET() {
       .groupBy(orders.status);
 
     // --- Cobranças (donut) ---
-    const billingRows = await db
+    const billingRows = visibility.financial ? await db
       .select({
         status: orders.billingStatus,
         count: sql<number>`count(*)::int`,
@@ -98,7 +100,7 @@ export async function GET() {
       .from(orders)
       .leftJoin(closures, eq(closures.id, orders.activeClosureId))
       .where(eq(orders.companyId, user.companyId))
-      .groupBy(orders.billingStatus);
+      .groupBy(orders.billingStatus) : [];
 
     // --- Calendário: pedidos agrupados por data de evento (mês atual ±) ---
     const calOrders = await db
@@ -130,7 +132,7 @@ export async function GET() {
       .from(orders)
       .where(eq(orders.companyId, user.companyId));
 
-    const revenue = await conferenceFinanceTotals(user);
+    const revenue = visibility.financial ? await conferenceFinanceTotals(user) : null;
 
     const returnedByItem = db.select({
       orderItemId: returnItems.orderItemId,
@@ -186,7 +188,7 @@ export async function GET() {
         start: o.eventDate,
         due: o.returnDueDate,
         status: o.status,
-        billing: o.billingStatus,
+        billing: visibility.financial ? o.billingStatus : null,
       })),
       topItems: itemStats.map((s) => ({
         name: s.name,

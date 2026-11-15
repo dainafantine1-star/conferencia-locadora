@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { tool } from "ai";
 import { z } from "zod";
 import { and, eq, ilike, desc } from "drizzle-orm";
@@ -28,9 +29,9 @@ export function systemQueryTool(initial: SessionUser) {
     const params = new URLSearchParams(); if (data.start) params.set("start", data.start); if (data.end) params.set("end", data.end); if (data.id) params.set("id", data.id);
     switch (data.module) {
       case "comandos": return { commands: commandCapabilities(user), blocked: ["excluir", "apagar", "cancelar registros", "desativar cadastros", "alterar credenciais, senhas ou permissões de usuários", "restaurar banco"], note: "Comandos com confirmation=true são executados após confirmação no cartão; os outros executam diretamente quando solicitados." };
-      case "clientes": return db.select().from(customers).where(and(eq(customers.companyId, user.companyId), data.id ? eq(customers.id, data.id) : ilike(customers.name, q))).limit(30);
-      case "produtos": return db.select().from(catalogItems).where(and(eq(catalogItems.companyId, user.companyId), data.id ? eq(catalogItems.id, data.id) : ilike(catalogItems.name, q))).limit(30);
-      case "pedidos": {
+      case "clientes": await assertFeature(user, "customers"); return db.select().from(customers).where(and(eq(customers.companyId, user.companyId), data.id ? eq(customers.id, data.id) : ilike(customers.name, q))).limit(30);
+      case "produtos": await assertFeature(user, "inventory"); return db.select().from(catalogItems).where(and(eq(catalogItems.companyId, user.companyId), data.id ? eq(catalogItems.id, data.id) : ilike(catalogItems.name, q))).limit(30);
+      case "pedidos": { await assertFeature(user, "events");
         const found = await db.select({ id: orders.id, number: orders.number, eventName: orders.eventName, eventDate: orders.eventDate, returnDueDate: orders.returnDueDate, status: orders.status, customer: customers.name }).from(orders).innerJoin(customers, and(eq(customers.id, orders.customerId), eq(customers.companyId, user.companyId))).where(and(eq(orders.companyId, user.companyId), data.id ? eq(orders.id, data.id) : ilike(orders.eventName, q))).orderBy(desc(orders.eventDate)).limit(40);
         return { orders: found, items: data.id && found.length ? await db.select().from(orderItems).where(eq(orderItems.orderId, found[0].id)) : [] };
       }

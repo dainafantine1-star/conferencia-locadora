@@ -116,6 +116,7 @@ beforeEach(async () => {
   await client.exec("TRUNCATE companies, users CASCADE");
   await db.insert(schema.companies).values([{ id: companyA, name: "Auditoria A" }, { id: companyB, name: "Auditoria B" }]);
   await db.insert(schema.users).values({ id: identity.id, name: "Auditoria", email: "audit@example.test", passwordHash: "not-a-login-fixture" });
+  await db.insert(schema.memberships).values([{ userId: identity.id, companyId: companyA, role: "gestor", accountRole: "owner" }, { userId: identity.id, companyId: companyB, role: "gestor", accountRole: "owner" }]);
   const [customer] = await db.insert(schema.customers).values({ companyId: companyA, name: "Cliente de teste" }).returning();
   customerId = customer.id;
   const [item] = await db.insert(schema.catalogItems).values({ companyId: companyA, name: "Taça", unit: "un", stockQty: 200, replacementCents: 1200, damageCents: 1200 }).returning();
@@ -125,7 +126,7 @@ beforeEach(async () => {
 });
 
 async function configuredQuote(qty = 2, price = 1001) {
-  await db.insert(schema.memberships).values({ userId: identity.id, companyId: companyA, role: "gestor", commissionBps: 1000 });
+  await db.update(schema.memberships).set({ commissionBps: 1000 }).where(and(eq(schema.memberships.userId, identity.id), eq(schema.memberships.companyId, companyA)));
   await db.update(schema.customers).set({ email: "customer@example.test", taxId: "00000000000", address: "Endereço exclusivamente de teste" }).where(eq(schema.customers.id, customerId));
   await saveSettings(identity, { preferences: { legalName: "Locadora de teste", taxId: "00000000000000", address: "Endereço de teste", contractTerms: "Cláusulas exclusivamente para teste funcional.", defaultCommissionBps: 1000 } });
   return createQuote(identity, { customerId, sellerId: identity.id, eventName: "Evento de teste", eventDate: "2027-06-10", returnDueDate: "2027-06-12",

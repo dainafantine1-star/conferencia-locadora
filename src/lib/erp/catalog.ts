@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -8,6 +9,7 @@ import { cents, mediaValue, uuid, audit, fail } from "./common";
 export const productSchema = z.object({ name: z.string().trim().min(1).max(300), unit: z.string().min(1).max(20), stockQty: z.number().int().min(0).max(1000000).nullable().optional(), replacementCents: cents, damageCents: cents.nullable().optional(), rentalPriceCents: cents.nullable().optional(), priceUnit: z.enum(["evento", "diaria", "hora"]).optional(), description: z.string().max(5000).optional(), imageUrl: mediaValue.optional(), published: z.boolean().optional(), featured: z.boolean().optional(), active: z.boolean().optional() });
 export const productUpdateSchema = productSchema.partial().extend({ id: uuid });
 export async function createProduct(user: SessionUser, input: unknown) {
+  await assertFeature(user, "inventory", "create");
   const data = productSchema.parse(input);
   return db.transaction(async tx => {
     const [item] = await tx.insert(catalogItems).values({ ...data, companyId: user.companyId, stockQty: data.stockQty ?? null, damageCents: data.damageCents ?? null, rentalPriceCents: data.rentalPriceCents ?? null }).returning();
@@ -16,6 +18,7 @@ export async function createProduct(user: SessionUser, input: unknown) {
 }
 export async function updateProduct(user: SessionUser, input: unknown) {
   const { id, ...values } = productUpdateSchema.parse(input);
+  await assertFeature(user, "inventory", values.active === false ? "delete" : "edit");
   if (!Object.keys(values).length) fail("Informe os campos para atualizar");
   return db.transaction(async tx => {
     const [current] = await tx.select().from(catalogItems).where(and(eq(catalogItems.id, id), eq(catalogItems.companyId, user.companyId))).for("update");

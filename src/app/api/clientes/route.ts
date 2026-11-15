@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { createCustomer, updateCustomer } from '@/lib/erp/customer';
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
@@ -10,6 +11,7 @@ import { requirePermission } from "@/lib/auth/session";
 export async function GET(req: NextRequest) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "customers", "view");
     const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
     const rows = await db
       .select()

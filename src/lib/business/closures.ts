@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { db } from "@/lib/db";
 import { orders, orderItems, returns, returnItems, closures, billingEvents, auditLog, financialEntries, settlements } from "@/lib/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
@@ -23,6 +24,7 @@ export async function loadOrderBalances(orderId: string) {
 }
 
 export async function closeOrder(input: CloseOrderInput, user: SessionUser) {
+  await assertFeature(user, "returns", "edit");
   return db.transaction(async (tx) => {
     await lockCompany(tx, user.companyId);
     const [order] = await tx
@@ -104,6 +106,7 @@ export async function adjustCharge(input: {
   adjustmentCents: number;
   reason: string;
 }, user: SessionUser) {
+  await assertFeature(user, "finance", "financial");
   if (!input.reason.trim()) throw new Error("Justificativa é obrigatória");
   if (!Number.isInteger(input.adjustmentCents) || input.adjustmentCents < 0) {
     throw new Error("Ajuste deve ser um inteiro não negativo em centavos");
@@ -184,6 +187,7 @@ export async function adjustCharge(input: {
 }
 
 export async function reopenOrder(input: { orderId: string; reason: string }, user: SessionUser) {
+  await assertFeature(user, "returns", "edit");
   if (!input.reason.trim()) throw new Error("Motivo da reabertura é obrigatório");
 
   return db.transaction(async (tx) => {
@@ -240,6 +244,7 @@ export async function setBillingStatus(input: {
   status: "sem_cobranca" | "pendente" | "recebida" | "dispensada";
   note?: string;
 }, user: SessionUser) {
+  await assertFeature(user, "finance", "financial");
   return db.transaction(async (tx) => {
     await lockCompany(tx, user.companyId);
     const [order] = await tx
@@ -303,6 +308,7 @@ export async function setBillingStatus(input: {
 }
 
 export async function buildOrderSummary(orderId: string, user: SessionUser) {
+  await assertFeature(user, "returns", "view");
   const [order] = await db
     .select()
     .from(orders)

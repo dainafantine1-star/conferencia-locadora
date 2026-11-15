@@ -3,6 +3,7 @@ import { orders, customers, closures, billingEvents } from "@/lib/db/schema";
 import { eq, and, lt, gte, sql, desc } from "drizzle-orm";
 import { requireSession } from "@/lib/auth/session";
 import { handle } from "@/lib/api/http";
+import { dashboardVisibility } from "@/lib/saas/dashboard";
 
 function localDateInTz(tz: string): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -16,6 +17,7 @@ function localDateInTz(tz: string): string {
 export async function GET() {
   return handle(async () => {
     const { user } = await requireSession();
+    const visibility = await dashboardVisibility(user);
     const today = localDateInTz(user.timezone);
 
     const openOrders = await db
@@ -40,7 +42,7 @@ export async function GET() {
     // "em conferência": aberto com previsão futura (ainda em andamento)
     const inProgress = openOrders.filter((o) => o.returnDueDate > today);
 
-    const pendingBilling = await db
+    const pendingBilling = visibility.financial ? await db
       .select({
         id: orders.id,
         number: orders.number,
@@ -60,7 +62,7 @@ export async function GET() {
         ),
       )
       .orderBy(desc(orders.closedAt))
-      .limit(50);
+      .limit(50) : [];
 
     const recentClosed = await db
       .select({
@@ -81,11 +83,11 @@ export async function GET() {
 
     return {
       today,
-      dueToday,
-      overdue,
-      inProgress,
+      dueToday: dueToday.map(o => ({ ...o, billingStatus: visibility.financial ? o.billingStatus : null })),
+      overdue: overdue.map(o => ({ ...o, billingStatus: visibility.financial ? o.billingStatus : null })),
+      inProgress: inProgress.map(o => ({ ...o, billingStatus: visibility.financial ? o.billingStatus : null })),
       pendingBilling,
-      recentClosed,
+      recentClosed: recentClosed.map(o => ({ ...o, finalCents: visibility.financial ? o.finalCents : null, billingStatus: visibility.financial ? o.billingStatus : null })),
       counts: {
         dueToday: dueToday.length,
         overdue: overdue.length,

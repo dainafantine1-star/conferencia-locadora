@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { db } from "@/lib/db";
 import {
   orders,
@@ -45,6 +46,7 @@ export async function registerReturn(
   input: RegisterReturnInput,
   user: SessionUser,
 ): Promise<RegisterReturnResult> {
+  await assertFeature(user, "returns", "edit");
   return db.transaction(async (tx) => {
     const [order] = await tx
       .select()

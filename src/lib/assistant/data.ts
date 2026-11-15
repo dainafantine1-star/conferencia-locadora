@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -10,6 +11,7 @@ const agentSchema = z.object({ id: uuid.optional(), name: z.string().trim().min(
   instructions: z.string().max(16000), channel: z.enum(["interno", "whatsapp"]), mode: z.enum(["assistido", "automatico"]),
   active: z.boolean(), keywords: z.array(z.string().trim().min(2).max(60)).max(30).default(["atendente", "humano"]) }).strict();
 export async function saveAgent(user: SessionUser, input: unknown) {
+  await assertFeature(user, "attendance", "edit");
   assertAllowed(user, "gestor"); const data = agentSchema.parse(input);
   return db.transaction(async tx => {
     await lockCompany(tx, user.companyId);
@@ -30,6 +32,7 @@ export async function saveAgent(user: SessionUser, input: unknown) {
   });
 }
 export async function agentsData(user: SessionUser) {
+  await assertFeature(user, "attendance", "view");
   assertAllowed(user, "gestor");
   const [agents, runs] = await Promise.all([
     db.select().from(aiAgents).where(eq(aiAgents.companyId, user.companyId)).orderBy(aiAgents.name),
@@ -40,6 +43,7 @@ const ruleSchema = z.object({ id: uuid.optional(), name: z.string().trim().min(2
   trigger: z.enum(["nova_conversa", "mensagem_recebida", "sem_resposta"]), keyword: z.string().max(120).default(""),
   delayMinutes: z.number().int().min(0).max(10080), action: z.enum(["rascunho", "enviar", "humano"]), text: z.string().max(3000).default("") }).strict();
 export async function saveRule(user: SessionUser, input: unknown) {
+  await assertFeature(user, "attendance", "edit");
   assertAllowed(user, "gestor"); const data = ruleSchema.parse(input);
   if (data.action !== "humano" && !data.text.trim()) fail("Informe a mensagem da automação");
   if (data.trigger === "sem_resposta" && data.delayMinutes < 5) fail("O acompanhamento precisa aguardar pelo menos cinco minutos");
@@ -53,6 +57,7 @@ export async function saveRule(user: SessionUser, input: unknown) {
   });
 }
 export async function rulesData(user: SessionUser) {
+  await assertFeature(user, "attendance", "view");
   assertAllowed(user, "gestor");
   return { rules: await db.select().from(aiRules).where(eq(aiRules.companyId, user.companyId)).orderBy(aiRules.name),
     jobs: await db.select().from(aiJobs).where(eq(aiJobs.companyId, user.companyId)).orderBy(desc(aiJobs.createdAt)).limit(100) };
@@ -71,6 +76,7 @@ export async function ownHistory(user: SessionUser, id: string) {
   return { thread, messages: messages.reverse() };
 }
 export async function inboxData(user: SessionUser, threadId?: string) {
+  await assertFeature(user, "attendance", "view");
   assertAllowed(user, "atendimento");
   const threads = await db.select().from(aiThreads).where(and(eq(aiThreads.companyId, user.companyId), eq(aiThreads.channel, "whatsapp"))).orderBy(desc(aiThreads.updatedAt)).limit(100);
   let messages: typeof aiMessages.$inferSelect[] = [];
@@ -85,6 +91,7 @@ export async function inboxData(user: SessionUser, threadId?: string) {
   return { threads, messages, team };
 }
 export async function updateThread(user: SessionUser, input: unknown) {
+  await assertFeature(user, "attendance", "edit");
   assertAllowed(user, "atendimento");
   const data = z.object({ id: uuid, status: z.enum(["aberto", "humano", "resolvido"]), assignedTo: uuid.nullable().optional() }).strict().parse(input);
   return db.transaction(async tx => {

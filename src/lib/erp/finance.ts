@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
@@ -19,6 +20,7 @@ export const settlementSchema = z.object({
   idempotencyKey: z.string().min(16).max(120),
 });
 export async function createFinancialEntry(user: SessionUser, input: unknown) {
+  await assertFeature(user, "finance", "create");
   const data = entrySchema.parse(input);
   return db.transaction(async tx => {
     if (data.customerId) {
@@ -86,11 +88,13 @@ export async function recordSettlement(tx: Tx, user: SessionUser, input: z.infer
   return { settlement, duplicated: false };
 }
 export async function settleEntry(user: SessionUser, input: unknown) {
+  await assertFeature(user, "finance", "financial");
   const data = settlementSchema.parse(input);
   if (data.method === "pagbank") fail("Pagamentos PagBank são confirmados exclusivamente pelo provedor");
   return db.transaction(tx => recordSettlement(tx, user, data));
 }
 export async function cancelEntry(user: SessionUser, input: unknown) {
+  await assertFeature(user, "finance", "delete");
   const data = z.object({ id: uuid, reason: z.string().trim().min(3).max(2000) }).parse(input);
   return db.transaction(async tx => {
     const [entry] = await tx.select().from(financialEntries).where(and(eq(financialEntries.id, data.id), eq(financialEntries.companyId, user.companyId))).for("update");
@@ -107,6 +111,7 @@ export async function cancelEntry(user: SessionUser, input: unknown) {
 }
 
 export async function financeData(user: SessionUser, query: URLSearchParams) {
+  await assertFeature(user, "finance", "financial");
   const conditions = [eq(financialEntries.companyId, user.companyId)];
   const direction = query.get("direction");
   if (direction) conditions.push(eq(financialEntries.direction, z.enum(["pagar", "receber"]).parse(direction)));
@@ -139,6 +144,7 @@ export async function financeData(user: SessionUser, query: URLSearchParams) {
 }
 
 export async function importConference(user: SessionUser, input: unknown) {
+  await assertFeature(user, "finance", "financial");
   const data = z.object({ orderId: uuid, dueDate: day, receivedCents: z.number().int().nonnegative(),
     occurredAt: z.iso.datetime().optional(), method: settlementSchema.shape.method, confirmed: z.literal(true) }).parse(input);
   if (data.method === "pagbank") fail("Uma importação histórica não confirma pagamentos no provedor");
@@ -164,6 +170,7 @@ export async function importConference(user: SessionUser, input: unknown) {
 }
 
 export async function commissionData(user: SessionUser) {
+  await assertFeature(user, "finance", "financial");
   const rows = await db.select({ commission: commissions, seller: users.name, contractNumber: rentalDocuments.number })
     .from(commissions).innerJoin(users, eq(users.id, commissions.sellerId))
     .innerJoin(rentalDocuments, eq(rentalDocuments.id, commissions.documentId))
@@ -171,6 +178,7 @@ export async function commissionData(user: SessionUser) {
   return { commissions: rows.map(r => ({ ...r.commission, seller: r.seller, contractNumber: r.contractNumber })) };
 }
 export async function payCommission(user: SessionUser, input: unknown) {
+  await assertFeature(user, "finance", "financial");
   const data = z.object({ id: uuid, method: settlementSchema.shape.method, idempotencyKey: z.string().min(16).max(120) }).parse(input);
   if (data.method === "pagbank") fail("Informe o método do pagamento manual");
   return db.transaction(async tx => {

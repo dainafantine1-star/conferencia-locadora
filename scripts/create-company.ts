@@ -12,7 +12,7 @@ async function main() {
   await db.transaction(async tx => {
     const [company] = await tx.insert(companies).values({ name: values.company, timezone: "America/Bahia" }).returning();
     const [user] = await tx.insert(users).values({ email: values.email.trim().toLowerCase(), name: values.name, passwordHash }).returning();
-    await tx.insert(memberships).values({ companyId: company.id, userId: user.id, role: "gestor" });
+    await tx.insert(memberships).values({ companyId: company.id, userId: user.id, role: "gestor", accountRole: "owner" });
   });
   console.log("Empresa e gestor criados sem dados demonstrativos. Entre no sistema para configurar os demais dados.");
 }

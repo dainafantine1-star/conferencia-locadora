@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -9,6 +10,7 @@ import { defaultPreferences, preferencesSchema, checkedAddress, validFederalId }
 import type { FiscalEnvironment } from "./types";
 
 export async function fiscalAccess(user: SessionUser, manager = false) {
+  await assertFeature(user, "invoices", "view");
   const [membership] = await db.select({ role: memberships.role, permissions: memberships.permissions }).from(memberships).innerJoin(users, eq(users.id, memberships.userId))
     .where(and(eq(memberships.userId, user.id), eq(memberships.companyId, user.companyId), eq(users.active, true)));
   if (!membership || membership.role !== "gestor" && (manager || !membership.permissions.includes("fiscal"))) fail(manager ? "Apenas gestores podem configurar a emissão fiscal" : "Seu perfil não tem permissão para notas fiscais", 403);
@@ -27,6 +29,7 @@ export async function fiscalSettingsData(user: SessionUser) {
   return { preferences: c.preferences, secretStatus: { homologacao: !!c.secrets.homologacao, producao: !!c.secrets.producao }, emitterReady: emitterReady(c.preferences) };
 }
 export async function saveFiscalSettings(user: SessionUser, input: unknown) {
+  await assertFeature(user, "invoices", "edit");
   user = await fiscalAccess(user, true);
   const data = z.object({ preferences: preferencesSchema, secrets: z.object({ homologacao: z.string().max(5000).optional(), producao: z.string().max(5000).optional() }).strict().optional(), removeSecrets: z.array(z.enum(["homologacao", "producao"])).optional() }).strict().parse(input);
   await db.transaction(async tx => {

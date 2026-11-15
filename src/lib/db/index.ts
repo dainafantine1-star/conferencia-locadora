@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import * as schema from "./schema";
 import path from "path";
 import fs from "fs";
+import { postgresOptions } from "./postgres-options";
 
 export type Db = ReturnType<typeof createDb>;
 
@@ -20,7 +21,7 @@ function createDb() {
     // Produção / Vercel (ex.: Neon) — Postgres real
     const pool =
       globalForDb.__pgPool ??
-      new Pool({ connectionString, max: 10 });
+      new Pool({ ...postgresOptions(connectionString), max: 10 });
     // Compartilha o pool também em produção para evitar um pool por chunk/rota.
     globalForDb.__pgPool = pool;
     return drizzlePg(pool, { schema });

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth/options";
 import { db } from "@/lib/db";
-import { orders, users, memberships } from "@/lib/db/schema";
+import { orders, users, memberships, companies } from "@/lib/db/schema";
 import type { Permission } from "@/lib/erp/types";
 import { eq, and } from "drizzle-orm";
 
@@ -13,6 +13,8 @@ export type SessionUser = {
   role: "gestor" | "operador";
   timezone: string;
   permissions?: Permission[];
+  accountRole?: import("@/lib/saas/catalog").AccountRole;
+  grants?: import("@/lib/saas/catalog").Grants | null;
 };
 
 export class AuthError extends Error {
@@ -41,30 +43,33 @@ export async function requireSession(): Promise<{ user: SessionUser }> {
     throw new AuthError("Não autenticado", 401);
   }
   // Re-check membership and activation so role changes revoke existing sessions.
-  const [membership] = await db.select({ role: memberships.role, permissions: memberships.permissions, authVersion: users.authVersion })
+  const [membership] = await db.select({ role: memberships.role, accountRole: memberships.accountRole, grants: memberships.grants, permissions: memberships.permissions, authVersion: users.authVersion, companyName: companies.name, timezone: companies.timezone, name: users.name, email: users.email })
     .from(memberships).innerJoin(users, eq(users.id, memberships.userId))
-    .where(and(eq(memberships.userId, raw.id), eq(memberships.companyId, raw.companyId), eq(users.active, true)));
+    .innerJoin(companies, eq(companies.id, memberships.companyId))
+    .where(and(eq(memberships.userId, raw.id), eq(memberships.companyId, raw.companyId), eq(users.active, true), eq(memberships.active, true)));
   if (!membership) throw new AuthError("Acesso revogado", 401);
   if (membership.authVersion !== (raw.authVersion ?? 1)) throw new AuthError("Sua sessão foi revogada. Entre novamente.", 401);
   return {
     user: {
       id: raw.id,
-      email: raw.email ?? "",
-      name: raw.name ?? "",
+      email: membership.email,
+      name: membership.name,
       companyId: raw.companyId,
-      companyName: raw.companyName ?? "",
+      companyName: membership.companyName,
       role: membership.role,
       permissions: membership.permissions,
-      timezone: raw.timezone ?? "America/Bahia",
+      accountRole: membership.accountRole,
+      grants: membership.grants,
+      timezone: membership.timezone,
     },
   };
 }
 
 export async function requirePermission(permission: Permission) {
   const session = await requireSession();
-  if (session.user.role !== "gestor" && !session.user.permissions?.includes(permission)) {
-    throw new AuthError("Seu perfil não tem permissão para este módulo", 403);
-  }
+  const { assertFeature } = await import("@/lib/saas/access");
+  const { permissionFeature } = await import("@/lib/saas/catalog");
+  await assertFeature(session.user, permissionFeature[permission]);
   return session;
 }
 

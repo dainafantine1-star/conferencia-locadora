@@ -142,6 +142,8 @@ describe("assistente e atendimento com banco real isolado", () => {
     await db.insert(s.rentalDocuments).values([{ companyId: company, customerId: customer.id, number: 1, kind: "orcamento", status: "rascunho", eventName: "Proposta", eventDate: "2027-06-12", returnDueDate: "2027-06-13", createdBy: user.id, lines: [], subtotalCents: 0, totalCents: 0 }, { companyId: company, customerId: customer.id, number: 2, kind: "orcamento", status: "contratado", eventName: "Já contratado", eventDate: "2027-06-12", returnDueDate: "2027-06-13", createdBy: user.id, lines: [], subtotalCents: 0, totalCents: 0 }]);
     const data = await calendarData(user, new URLSearchParams({ year: "2027", month: "6" })); expect(data.events).toHaveLength(307); expect(data.dates.some(d => d.name === "Data local verificada")).toBe(true); expect(data.dates.some(d => d.name === "São João")).toBe(true); expect(data.events.some(e => e.title === "Já contratado")).toBe(false);
     const operator = await calendarData({ ...user, role: "operador", permissions: [] }, new URLSearchParams({ year: "2027", month: "6" })); expect(operator.events.some(e => e.kind === "orcamento")).toBe(false);
+    await expect(calendarData({ ...user, companyId: other }, new URLSearchParams({ year: "2027", month: "6" }))).rejects.toMatchObject({ status: 403 });
+    await db.insert(s.memberships).values({ userId: user.id, companyId: other, role: "gestor" });
     const isolated = await calendarData({ ...user, companyId: other }, new URLSearchParams({ year: "2027", month: "6" })); expect(isolated.events).toHaveLength(0); expect(isolated.dates.some(d => d.name === "Data local verificada")).toBe(false);
   });
   it("guia de QR Code funciona sem IA, persiste e não duplica ao repetir requestKey", async () => {
@@ -275,7 +277,9 @@ describe("assistente e atendimento com banco real isolado", () => {
   });
   it("RLS impede leitura direta por papel sem privilégio, mantendo acesso do servidor", async () => {
     await receiveMessage(company, inbound());
-    await client.exec("do $$ begin if not exists(select 1 from pg_roles where rolname='assistant_anon_test') then create role assistant_anon_test nologin; end if; end $$; grant usage on schema public to assistant_anon_test; grant select on ai_messages to assistant_anon_test;");
+    // Grant only the policy helper to this isolated role so this assertion tests
+    // tenant filtering independently of the production API's table revocations.
+    await client.exec("do $$ begin if not exists(select 1 from pg_roles where rolname='assistant_anon_test') then create role assistant_anon_test nologin; end if; end $$; grant usage on schema public, detali_private to assistant_anon_test; grant execute on function detali_private.detali_has_company(uuid) to assistant_anon_test; grant select on ai_messages to assistant_anon_test;");
     try {
       await client.exec("set role assistant_anon_test");
       const result = await client.query<{ n: number }>("select count(*)::int as n from ai_messages"); expect(result.rows[0].n).toBe(0);

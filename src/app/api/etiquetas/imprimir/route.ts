@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { db } from "@/lib/db";
 import { scanLabels, catalogItems } from "@/lib/db/schema";
 import { requireSession } from "@/lib/auth/session";
@@ -8,6 +9,7 @@ const escape = (v: string) => v.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "
 export async function GET() {
   try {
     const { user } = await requireSession();
+    await assertFeature(user, "inventory", "view");
     const labels = await db.select({ code: scanLabels.code, kind: scanLabels.kind, qty: scanLabels.qty, name: catalogItems.name, unit: catalogItems.unit })
       .from(scanLabels).innerJoin(catalogItems, eq(catalogItems.id, scanLabels.catalogItemId))
       .where(and(eq(scanLabels.companyId, user.companyId), eq(scanLabels.active, true))).limit(2000);

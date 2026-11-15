@@ -5,8 +5,8 @@ import type { SessionUser } from "@/lib/auth/session";
 import { fail } from "@/lib/erp/common";
 
 export async function freshUser(user: SessionUser) {
-  const [row] = await db.select({ role: memberships.role, permissions: memberships.permissions }).from(memberships)
-    .innerJoin(users, eq(users.id, memberships.userId)).where(and(eq(memberships.companyId, user.companyId), eq(memberships.userId, user.id), eq(users.active, true)));
+  const [row] = await db.select({ role: memberships.role, permissions: memberships.permissions, accountRole: memberships.accountRole, grants: memberships.grants }).from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId)).where(and(eq(memberships.companyId, user.companyId), eq(memberships.userId, user.id), eq(users.active, true), eq(memberships.active, true)));
   if (!row) fail("Acesso revogado", 403);
   return { ...user, ...row };
 }

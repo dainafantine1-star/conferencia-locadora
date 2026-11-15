@@ -36,6 +36,7 @@ const authOptions = {
       credentials: {
         email: { label: "E-mail", type: "email" },
         password: { label: "Senha", type: "password" },
+        companyId: { label: "Empresa", type: "text" },
       },
       async authorize(credentials) {
         const email =
@@ -61,7 +62,7 @@ const authOptions = {
           })
           .from(memberships)
           .innerJoin(companies, eq(memberships.companyId, companies.id))
-          .where(eq(memberships.userId, user.id))
+          .where(and(eq(memberships.userId, user.id), eq(memberships.active, true), ...(typeof credentials?.companyId === "string" && /^[a-f0-9-]{36}$/.test(credentials.companyId) ? [eq(memberships.companyId, credentials.companyId)] : [])))
           .limit(1);
         if (!membership) return null;
 
@@ -79,7 +80,7 @@ const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }: { token: JWT; user?: User | { id?: string } }) {
+    async jwt({ token, user, trigger, session }: { token: JWT; user?: User | { id?: string }; trigger?: "signIn" | "signUp" | "update"; session?: unknown }) {
       const u = user as Partial<AppUser> | undefined;
       if (u?.id) {
         token.id = u.id;
@@ -88,6 +89,15 @@ const authOptions = {
         token.companyName = u.companyName;
         token.timezone = u.timezone;
         token.authVersion = u.authVersion;
+      }
+      if (trigger === "update" && session && typeof session === "object" && "user" in session && session.user && typeof session.user === "object" && "companyId" in session.user) {
+        const companyId = session.user.companyId;
+        if (typeof companyId !== "string" || !/^[a-f0-9-]{36}$/.test(companyId)) throw new Error("Empresa inválida");
+        const [member] = await db.select({ companyId: memberships.companyId, role: memberships.role, companyName: companies.name, timezone: companies.timezone, authVersion: users.authVersion }).from(memberships)
+          .innerJoin(companies, eq(companies.id, memberships.companyId)).innerJoin(users, eq(users.id, memberships.userId))
+          .where(and(eq(memberships.userId, String(token.id ?? token.sub)), eq(memberships.companyId, companyId), eq(memberships.active, true), eq(users.active, true)));
+        if (!member || member.authVersion !== (token.authVersion ?? 1)) throw new Error("Acesso à empresa não autorizado");
+        Object.assign(token, member);
       }
       return token;
     },
@@ -106,5 +116,5 @@ const authOptions = {
   },
 } satisfies NextAuthConfig;
 
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth(authOptions);
 export type { AppSession, AppUser };

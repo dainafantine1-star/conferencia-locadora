@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import {
@@ -21,6 +22,7 @@ export async function GET(
 ) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "returns", "view");
     const { id } = await params;
     const order = await assertOrderAccess(id, user);
 

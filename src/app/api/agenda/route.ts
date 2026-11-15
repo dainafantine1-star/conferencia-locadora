@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
@@ -18,6 +19,7 @@ const slotSchema = z.object({
 export async function GET(req: NextRequest) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "events", "view");
     const day = daySchema.parse(req.nextUrl.searchParams.get("day"));
     const slots = await db.select().from(agendaSlots).where(eq(agendaSlots.companyId, user.companyId)).orderBy(agendaSlots.day, agendaSlots.hour);
     const available = await periodAvailability(user, day, day);
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   return handle(async () => {
     const { user } = await requireGestor();
+    await assertFeature(user, "events", "edit");
     const body = slotSchema.parse(await req.json());
     const [slot] = await db.insert(agendaSlots).values({ ...body, companyId: user.companyId })
       .onConflictDoUpdate({ target: [agendaSlots.companyId, agendaSlots.day, agendaSlots.hour], set: { capacity: body.capacity, booked: body.booked } }).returning();

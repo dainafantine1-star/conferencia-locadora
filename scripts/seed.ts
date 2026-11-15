@@ -29,7 +29,7 @@ async function main() {
   const u = (email: string) => users1.find((x) => x.email === email)!;
 
   await db.insert(schema.memberships).values([
-    { userId: u("gestor@louca.demo").id, companyId: emp1.id, role: "gestor" },
+    { userId: u("gestor@louca.demo").id, companyId: emp1.id, role: "gestor", accountRole: "owner" },
     { userId: u("operador@louca.demo").id, companyId: emp1.id, role: "operador" },
   ]);
 
@@ -40,7 +40,7 @@ async function main() {
     .returning();
 
   await db.insert(schema.memberships).values([
-    { userId: u("gestor@outra.demo").id, companyId: emp2.id, role: "gestor" },
+    { userId: u("gestor@outra.demo").id, companyId: emp2.id, role: "gestor", accountRole: "owner" },
     { userId: u("operador@outra.demo").id, companyId: emp2.id, role: "operador" },
   ]);
 

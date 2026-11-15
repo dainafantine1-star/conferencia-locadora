@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -46,6 +47,7 @@ async function uniqueCode(companyId: string): Promise<string> {
 export async function GET(req: NextRequest) {
   return handle(async () => {
     const { user } = await requireSession();
+    await assertFeature(user, "inventory", "view");
     const catalogItemId = req.nextUrl.searchParams.get("catalogItemId");
     const rows = await db
       .select({
@@ -78,6 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return handle(async () => {
     const { user } = await requirePermission("estoque");
+    await assertFeature(user, "inventory", "create");
     const body = generateSchema.parse(await req.json());
 
     const [item] = await db

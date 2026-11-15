@@ -3,10 +3,11 @@ import { PGlite } from "@electric-sql/pglite";
 import { Client } from "pg";
 import fs from "node:fs";
 import path from "node:path";
+import { postgresOptions } from "../src/lib/db/postgres-options";
 config({ path: ".env.local", quiet: true }); config({ quiet: true });
 async function main() {
   const directory = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
-  const client = process.env.DATABASE_URL ? new Client({ connectionString: process.env.DATABASE_URL }) : new PGlite(directory);
+  const client = process.env.DATABASE_URL ? new Client(postgresOptions(process.env.DATABASE_URL)) : new PGlite(directory);
   if (client instanceof Client) await client.connect();
   const query = (source: string, values?: unknown[]) => client instanceof Client ? client.query(source, values) : client.query<Record<string, unknown>>(source, values);
   try {

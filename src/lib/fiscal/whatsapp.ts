@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -20,6 +21,7 @@ async function whatsappJson(url: string, init: RequestInit) {
   const data = JSON.parse((await boundedBytes(response, 1024 * 1024)).toString("utf8")); return data as Record<string, unknown>;
 }
 export async function sendFiscalWhatsApp(user: SessionUser, input: unknown) {
+  await assertFeature(user, "invoices", "edit");
   user = await fiscalAccess(user);
   const data = z.object({ id: uuid, requestKey: z.string().min(16).max(120), consent: z.literal(true) }).strict().parse(input);
   const row = await findInvoice(user, data.id), phone = fiscalPhone(row.snapshot.draft.recipient.phone);

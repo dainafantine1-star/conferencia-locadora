@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq, gte, lte, ne, or, asc } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -6,6 +7,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { brazilianDates, type CalendarDate } from "./dates";
 
 export async function calendarData(user: SessionUser, query: URLSearchParams) {
+  await assertFeature(user, "events", "view");
   const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: user.timezone }).format(new Date());
   const year = z.coerce.number().int().min(1900).max(2199).parse(query.get("year") ?? localToday.slice(0, 4));
   const month = z.coerce.number().int().min(1).max(12).parse(query.get("month") ?? localToday.slice(5, 7));

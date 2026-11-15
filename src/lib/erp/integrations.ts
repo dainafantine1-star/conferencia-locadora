@@ -1,3 +1,4 @@
+import { assertFeature, assertPlan } from "@/lib/saas/access";
 import { z } from "zod";
 import { createHash, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
@@ -10,6 +11,7 @@ import { integrationConfig } from "./settings";
 import { rentalPdf, receiptPdf } from "./pdf";
 import { recordSettlement } from "./finance";
 import { shareDocument } from "./commercial";
+import { sharedDocument } from "./store";
 
 const providerTimeout = () => AbortSignal.timeout(25000);
 class ProviderError extends AuthError {
@@ -27,7 +29,7 @@ function publicUrl(value?: string) {
   if (!value || !value.startsWith("https://")) fail("Configure a URL pública HTTPS da locadora", 503);
   return value.replace(/\/$/, "");
 }
-function smtpTransport(config: Awaited<ReturnType<typeof integrationConfig>>) {
+export function smtpTransport(config: Awaited<ReturnType<typeof integrationConfig>>) {
   const { config: c, secrets } = config;
   if (!c.smtpHost || !c.smtpPort || !c.smtpUser || !c.mailFrom || !secrets.smtpPassword) fail("E-mail aguardando configuração SMTP", 503);
   return nodemailer.createTransport({ host: c.smtpHost, port: c.smtpPort, secure: c.smtpSecure ?? c.smtpPort === 465,
@@ -41,6 +43,7 @@ export async function testSmtp(user: SessionUser) {
 }
 const sendSchema = z.object({ id: uuid, channel: z.enum(["email", "whatsapp"]), requestKey: z.string().min(16).max(120), receipt: z.boolean().default(false) });
 export async function sendDocument(user: SessionUser, input: unknown) {
+  await assertFeature(user, input && typeof input === "object" && "receipt" in input && input.receipt ? "finance" : "proposals", "edit");
   const data = sendSchema.parse(input);
   const cfg = await integrationConfig(user.companyId);
   if (data.receipt && data.channel !== "email") fail("O envio de recibos utiliza e-mail");
@@ -98,8 +101,13 @@ export async function sendDocument(user: SessionUser, input: unknown) {
   }
 }
 
-export async function createCheckout(user: SessionUser, input: unknown) {
+export async function createCheckout(user: SessionUser, input: unknown, publicToken?: string) {
   const { entryId } = z.object({ entryId: uuid }).parse(input);
+  if (publicToken) {
+    const doc = await sharedDocument(publicToken);
+    if (doc.companyId !== user.companyId || !doc.installments.some(p => p.id === entryId && p.balanceCents > 0)) fail("Parcela não autorizada por este documento", 403);
+    await assertPlan(doc.companyId, "finance", "financial");
+  } else await assertFeature(user, "finance", "financial");
   const cfg = await integrationConfig(user.companyId);
   if (!cfg.secrets.pagbankToken) fail("PagBank aguardando configuração do token", 503);
   const base = publicUrl(cfg.settings?.preferences.publicUrl);
@@ -182,6 +190,7 @@ export async function pagbankWebhook(id: string, raw: string, signature: string)
 const signatureResult = z.object({ token: z.string(), status: z.string(), external_id: z.string().optional(),
   signed_file: z.string().nullable().optional(), signers: z.array(z.object({ sign_url: z.string().optional(), status: z.string(), signed_at: z.string().nullable().optional() })) });
 export async function requestSignature(user: SessionUser, input: unknown) {
+  await assertFeature(user, "proposals", "edit");
   const { id } = z.object({ id: uuid }).parse(input);
   const cfg = await integrationConfig(user.companyId);
   if (!cfg.secrets.zapsignToken) fail("Assinatura aguardando configuração do token ZapSign", 503);
@@ -214,8 +223,13 @@ export async function requestSignature(user: SessionUser, input: unknown) {
     throw error;
   }
 }
-export async function syncSignature(user: SessionUser, input: unknown) {
+export async function syncSignature(user: SessionUser, input: unknown, publicToken?: string) {
   const { id } = z.object({ id: uuid }).parse(input);
+  if (publicToken) {
+    const document = await sharedDocument(publicToken);
+    if (document.id !== id || document.companyId !== user.companyId) fail("Documento não autorizado por este link", 403);
+    await assertPlan(document.companyId, "proposals");
+  } else await assertFeature(user, "proposals", "view");
   const cfg = await integrationConfig(user.companyId);
   if (!cfg.secrets.zapsignToken) fail("Assinatura aguardando configuração", 503);
   const [doc] = await db.select().from(rentalDocuments).where(and(eq(rentalDocuments.id, id), eq(rentalDocuments.companyId, user.companyId)));

@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { catalogItems, orders, orderItems, returnItems, stockMovements } from "@/lib/db/schema";
@@ -53,6 +54,7 @@ const movementSchema = z.object({ catalogItemId: uuid,
   quantity: z.number().int().min(0).max(1000000), reason: z.string().trim().min(3).max(2000),
 }).refine(d => d.kind === "inventario" || d.quantity > 0, "Informe uma quantidade maior que zero");
 export async function moveStock(user: SessionUser, input: unknown) {
+  await assertFeature(user, "inventory", "edit");
   const data = movementSchema.parse(input);
   return db.transaction(async tx => {
     const [item] = await tx.select().from(catalogItems).where(and(eq(catalogItems.id, data.catalogItemId), eq(catalogItems.companyId, user.companyId))).for("update");
@@ -75,6 +77,7 @@ export async function moveStock(user: SessionUser, input: unknown) {
   });
 }
 export async function inventoryData(user: SessionUser, search: URLSearchParams) {
+  await assertFeature(user, "inventory", "view");
   const start = search.get("start") ?? localDay(user.timezone);
   const end = search.get("end") ?? start;
   const [items, movements] = await Promise.all([

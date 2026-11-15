@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -10,6 +11,7 @@ export const customerFields = customerEditableFields.extend({ phone: customerEdi
 export const customerCreateSchema = customerFields.extend({ active: z.boolean().default(true) });
 export const customerUpdateSchema = customerEditableFields.extend({ active: z.boolean() }).partial().extend({ id: uuid });
 export async function createCustomer(user: SessionUser, input: unknown) {
+  await assertFeature(user, "customers", "create");
   const data = customerCreateSchema.parse(input);
   return db.transaction(async tx => {
     const [customer] = await tx.insert(customers).values({ ...data, companyId: user.companyId }).returning();
@@ -18,6 +20,7 @@ export async function createCustomer(user: SessionUser, input: unknown) {
 }
 export async function updateCustomer(user: SessionUser, input: unknown) {
   const { id, ...values } = customerUpdateSchema.parse(input);
+  await assertFeature(user, "customers", values.active === false ? "delete" : "edit");
   if (!Object.keys(values).length) fail("Informe os campos para atualizar");
   return db.transaction(async tx => {
     const [customer] = await tx.update(customers).set(values).where(and(eq(customers.id, id), eq(customers.companyId, user.companyId))).returning();

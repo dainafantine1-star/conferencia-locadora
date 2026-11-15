@@ -78,6 +78,27 @@
       "when": 1794701984323,
       "tag": "0010_fiscal_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794754697976,
+      "tag": "0011_saas_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794755425471,
+      "tag": "0012_saas_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794776400000,
+      "tag": "0013_private_security_helpers",
+      "breakpoints": true
     }
   ]
 }

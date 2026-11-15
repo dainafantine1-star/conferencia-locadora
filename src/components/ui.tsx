@@ -6,6 +6,7 @@ import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { Brand } from "@/components/Brand";
 import { NavIcon, type NavIconName } from "@/components/NavIcon";
+import { routeFeature } from "@/lib/saas/routes";
 
 export function Card({ children, className = "", accent = false, id }: {
   children: React.ReactNode; className?: string; accent?: boolean; id?: string;
@@ -87,10 +88,14 @@ const NAV: NavItem[] = [
   { href: "/gestao", label: "Gestão", icon: "painel" },
   { href: "/clientes", label: "Clientes", icon: "clientes" },
   { href: "/equipe", label: "Equipe", icon: "equipe" },
+  { href: "/produto", label: "Recursos", icon: "catalogo" },
+  { href: "/conta", label: "Conta e plano", icon: "equipe" },
 ];
 
-export function AppShell({ children, role, permissions = [] }: { children: React.ReactNode; role?: string; permissions?: string[] }) {
+export function AppShell({ children, role, permissions = [], featureAccess = [], companyName = "" }: { children: React.ReactNode; role?: string; permissions?: string[]; featureAccess?: { id: string; enabled: boolean; canView: boolean }[]; companyName?: string }) {
   const pathname = usePathname();
+  const feature = routeFeature(pathname), access = featureAccess.find(f => f.id === feature);
+  const restricted = access && (!access.enabled || !access.canView);
   const can = (permission: string) => role === "gestor" || permissions.includes(permission);
   const items = NAV.filter(n => (n.href !== "/equipe" || role === "gestor") && (n.href !== "/atendimento" || can("atendimento")) && (n.href !== "/notas-fiscais" || can("fiscal")));
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
@@ -114,6 +119,7 @@ export function AppShell({ children, role, permissions = [] }: { children: React
         <p className="mt-1 text-xs leading-relaxed text-cream/75">Reservas, estoque e devoluções.</p>
       </div>
       <div className="border-t border-cream/15 px-4 py-4">
+        <Link href="/conta" className="mb-2 block break-words px-3 py-2 text-sm text-brand">{companyName || "Conta e plano"} ↗</Link>
         <p className="mb-2 px-3 text-xs text-cream/75">{role === "gestor" ? "Acesso gestor" : "Acesso operador"}</p>
         <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-cream/80 transition hover:bg-cream/10 hover:text-cream"><NavIcon name="sair" />Sair</button>
       </div>
@@ -130,12 +136,13 @@ export function AppShell({ children, role, permissions = [] }: { children: React
         <Link href="/pedidos" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-ink"><NavIcon name="agenda" />Eventos</Link>
         {can("fiscal") && <Link href="/notas-fiscais" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-action/25 bg-white px-4 text-sm font-semibold text-action">NF-e</Link>}
         {role === "gestor" && <Link href="/atendimento/automacoes" className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-action/25 px-3 text-sm font-semibold text-action">Automações WhatsApp ↗</Link>}
+        <Link href="/conta" className="inline-flex min-h-11 shrink-0 items-center rounded-xl border border-action/25 px-3 text-sm font-semibold text-action">Conta e plano</Link>
       </nav>
     </div>
-    <main id="conteudo" tabIndex={-1} className="detali-content mx-auto max-w-6xl px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-8 md:pb-8">{children}</main>
+    <main id="conteudo" tabIndex={-1} className="detali-content mx-auto max-w-6xl px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-8 md:pb-8">{restricted ? <Card><h1 className="text-2xl font-bold">Recurso indisponível</h1><p className="my-3">{!access.enabled ? "Seu plano não inclui este recurso." : "Seu perfil não permite visualizar este recurso."} Os dados e o histórico da empresa foram preservados.</p><Link className="text-action underline" href="/conta">Consultar plano e permissões</Link></Card> : children}</main>
     <nav aria-label="Navegação principal" className="detali-mobile-nav fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-cream shadow-[0_-4px_20px_rgb(37_27_35/6%)] md:hidden">
       <div className="mx-auto flex max-w-lg items-stretch justify-around">
-        {items.filter(item => !["/clientes", "/equipe", "/calendario", "/notas-fiscais"].includes(item.href)).map((item) => {
+        {items.filter(item => ["/painel", "/pedidos", "/catalogo", "/gestao", "/produto"].includes(item.href)).map((item) => {
           const active = isActive(item.href);
           return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`flex min-h-[64px] min-w-0 flex-1 flex-col items-center justify-center gap-1 border-t-2 text-[10px] font-semibold transition ${active ? "border-action bg-brand-soft/40 text-action" : "border-transparent text-slate-600 hover:bg-brand-soft/30"}`}>
             <NavIcon name={item.icon} />{item.label}

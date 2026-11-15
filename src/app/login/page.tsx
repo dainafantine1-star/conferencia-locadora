@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
 import { Brand } from "@/components/Brand";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -82,6 +83,7 @@ export default function LoginPage() {
           </Button>
         </form>
       </Card>
+      <Link href="/cadastro" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-action underline">Criar conta da minha empresa</Link>
       {process.env.NEXT_PUBLIC_DEMO_MODE === "1" && <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-600">
         <p className="mb-1 font-black text-slate-800">Acesso de demonstração</p>
         <p>E-mail: gestor@louca.demo</p>

@@ -65,6 +65,9 @@ export const memberships = pgTable(
     role: roleEnum("role").notNull(),
     permissions: jsonb("permissions").$type<Permission[]>().notNull().default([]),
     commissionBps: integer("commission_bps"),
+    accountRole: text("account_role").$type<import("@/lib/saas/catalog").AccountRole>().notNull().default("member"),
+    active: boolean("active").notNull().default(true),
+    grants: jsonb("grants").$type<import("@/lib/saas/catalog").Grants>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
   },
   (t) => [
@@ -710,3 +713,57 @@ export type Attachment = typeof attachments.$inferSelect;
 export type Closure = typeof closures.$inferSelect;
 export type BillingEvent = typeof billingEvents.$inferSelect;
 export type ScanLabel = typeof scanLabels.$inferSelect;
+
+// Configuração comercial da plataforma e dados dos novos módulos SaaS.
+export const saasPlans = pgTable("saas_plans", {
+  id: text("id").primaryKey(), name: text("name").notNull(), monthlyCents: integer("monthly_cents"),
+  features: jsonb("features").$type<import("@/lib/saas/catalog").PlanFeatures>().notNull(),
+  limits: jsonb("limits").$type<import("@/lib/saas/catalog").PlanLimits>().notNull(),
+  support: jsonb("support").$type<{ channels: string[]; slaHours: number | null; phoneByAppointment: boolean }>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now()),
+});
+export const saasSubscriptions = pgTable("saas_subscriptions", {
+  companyId: uuid("company_id").primaryKey().references(() => companies.id),
+  planId: text("plan_id").notNull().references(() => saasPlans.id), status: text("status").notNull().default("trial"),
+  cycle: text("cycle").notNull().default("monthly"), startsAt: timestamp("starts_at", { withTimezone: true }).notNull().default(now()),
+  endsAt: timestamp("ends_at", { withTimezone: true }), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now()),
+});
+export const platformAdmins = pgTable("platform_admins", { userId: uuid("user_id").primaryKey().references(() => users.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()) });
+export const platformAudit = pgTable("platform_audit", { id: uuid("id").defaultRandom().primaryKey(), userId: uuid("user_id").notNull().references(() => users.id), action: text("action").notNull(), payload: jsonb("payload").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()) });
+export const companyInvites = pgTable("company_invites", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id),
+  email: text("email").notNull(), tokenHash: text("token_hash").notNull(), accountRole: text("account_role").$type<import("@/lib/saas/catalog").AccountRole>().notNull(),
+  permissions: jsonb("permissions").$type<Permission[]>().notNull().default([]), grants: jsonb("grants").$type<import("@/lib/saas/catalog").Grants>(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), acceptedAt: timestamp("accepted_at", { withTimezone: true }), revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdBy: uuid("created_by").notNull().references(() => users.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+}, t => [uniqueIndex("company_invites_hash_key").on(t.tokenHash), index("company_invites_company_idx").on(t.companyId)]);
+export const productRecords = pgTable("product_records", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id),
+  module: text("module").notNull(), title: text("title").notNull(), status: text("status").notNull().default("ativo"),
+  orderId: uuid("order_id").references(() => orders.id), customerId: uuid("customer_id").references(() => customers.id),
+  data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+  createdBy: uuid("created_by").notNull().references(() => users.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(now()),
+}, t => [index("product_records_module_idx").on(t.companyId, t.module)]);
+export const checkinRecords = pgTable("checkin_records", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id), orderId: uuid("order_id").notNull().references(() => orders.id),
+  name: text("name").notNull(), externalKey: text("external_key").notNull(), source: text("source").notNull(),
+  qrHash: text("qr_hash").notNull(), checkedAt: timestamp("checked_at", { withTimezone: true }), createdBy: uuid("created_by").notNull().references(() => users.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+}, t => [uniqueIndex("checkin_records_company_key").on(t.companyId, t.orderId, t.externalKey), uniqueIndex("checkin_records_qr_key").on(t.qrHash)]);
+export const venueBookings = pgTable("venue_bookings", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id), venueId: uuid("venue_id").notNull().references(() => productRecords.id),
+  orderId: uuid("order_id").notNull().references(() => orders.id), startsAt: timestamp("starts_at", { withTimezone: true }).notNull(), endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+}, t => [index("venue_bookings_venue_idx").on(t.companyId, t.venueId)]);
+export const clientPortals = pgTable("client_portals", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id), customerId: uuid("customer_id").notNull().references(() => customers.id),
+  tokenHash: text("token_hash").notNull(), orderIds: jsonb("order_ids").$type<string[]>().notNull().default([]), active: boolean("active").notNull().default(true),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), createdBy: uuid("created_by").notNull().references(() => users.id), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+}, t => [uniqueIndex("client_portals_token_key").on(t.tokenHash)]);
+export const documentVisits = pgTable("document_visits", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id), documentId: uuid("document_id").notNull().references(() => rentalDocuments.id),
+  visitKey: text("visit_key").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+}, t => [uniqueIndex("document_visits_dedup_key").on(t.documentId, t.visitKey)]);
+export const companyDomains = pgTable("company_domains", {
+  id: uuid("id").defaultRandom().primaryKey(), companyId: uuid("company_id").notNull().references(() => companies.id), hostname: text("hostname").notNull(), verification: text("verification").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }), createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now()),
+}, t => [uniqueIndex("company_domains_host_key").on(t.hostname)]);

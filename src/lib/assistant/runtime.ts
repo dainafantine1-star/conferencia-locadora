@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { ToolLoopAgent, createGateway, isStepCount, tool, type ToolSet, type ModelMessage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -55,6 +56,7 @@ export async function generateAgent(user: SessionUser, thread: typeof aiThreads.
 }
 const chatSchema = z.object({ threadId: uuid.optional(), text: z.string().trim().min(1).max(3000), page: z.string().regex(/^\/[a-zA-Z0-9/_-]*$/).max(200).default("/gestao"), requestKey: uuid }).strict();
 export async function assistantChat(initial: SessionUser, input: unknown) {
+  await assertFeature(initial, "assistant", "view");
   const user = await freshUser(initial); const data = chatSchema.parse(input);
   const key = `chat:${user.id}:${data.requestKey}`;
   const [previous] = await db.select().from(aiMessages).where(and(eq(aiMessages.companyId, user.companyId), eq(aiMessages.requestKey, key)));
@@ -121,6 +123,7 @@ export async function externalReply(user: SessionUser, thread: typeof aiThreads.
     `Você atende um cliente externo pelo WhatsApp da ${user.companyName}. Identifique-se como assistente virtual. Não revele manuais internos, finanças, contatos de terceiros ou segredos. Não presuma identidade do cliente a partir de nome. Você só pode consultar conhecimento público, produtos publicados e registrar solicitações. Não confirme reserva ou contrato.\n${agent.instructions}`, agent);
 }
 export async function testAgent(user: SessionUser, id: string, text: string) {
+  await assertFeature(user, "attendance", "edit");
   assertAllowed(user, "gestor");
   const [agent] = await db.select().from(aiAgents).where(and(eq(aiAgents.id, uuid.parse(id)), eq(aiAgents.companyId, user.companyId)));
   if (!agent) fail("Agente não encontrado", 404);

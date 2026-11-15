@@ -1,0 +1,10 @@
+"use client";
+import { useState } from "react";
+import { Button, Card, Input, Select } from "@/components/ui";
+export function FinancialProofs({ entries, receipts }: { entries: { id: string; description: string }[]; receipts: { id: string; title: string; data: Record<string, unknown> }[] }) {
+  const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
+  return <Card><h2 className="mb-3 text-xl font-semibold">Comprovantes financeiros</h2><form className="space-y-3" onSubmit={async e => {
+    e.preventDefault(); setBusy(true); setError(""); setMessage(""); const body = new FormData(e.currentTarget);
+    try { const response = await fetch("/api/produto/financeiro/comprovante", { method: "POST", body }); const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Falha no anexo"); setMessage("Comprovante anexado. Isso não altera ou confirma a baixa financeira."); window.dispatchEvent(new Event("detali-datachanged")); } catch (e) { setError(e instanceof Error ? e.message : "Falha no anexo"); } finally { setBusy(false); }
+  }}><Select name="entryId" label="Conta vinculada" required><option value="">Selecione</option>{entries.map(entry => <option key={entry.id} value={entry.id}>{entry.description}</option>)}</Select><Input label="PDF ou imagem de até 5 MB" name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /><Button type="submit" disabled={busy}>{busy ? "Enviando…" : "Anexar comprovante"}</Button></form>{message && <p role="status" className="mt-3 text-sm text-emerald-800">{message}</p>}{error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}<div className="mt-4 space-y-3">{receipts.map(receipt => <p key={receipt.id} className="text-sm"><a target="_blank" rel="noreferrer" className="font-semibold text-action underline" href={`/api/produto/financeiro/comprovante?id=${receipt.id}`}>{receipt.title}</a> · {entries.find(entry => entry.id === receipt.data.entryId)?.description ?? "Conta vinculada"}</p>)}</div></Card>;
+}

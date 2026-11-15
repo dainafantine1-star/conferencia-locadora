@@ -1,3 +1,4 @@
+import { assertFeature } from "@/lib/saas/access";
 import { z } from "zod";
 import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -10,6 +11,7 @@ import { normalized } from "./help";
 const schema = z.object({ id: uuid.optional(), title: z.string().trim().min(3).max(200),
   content: z.string().trim().min(10).max(100000), audience: z.enum(["interno", "publico"]), active: z.boolean().default(true) }).strict();
 export async function saveKnowledge(user: SessionUser, input: unknown) {
+  await assertFeature(user, "attendance", "edit");
   assertAllowed(user, "gestor"); const data = schema.parse(input);
   return db.transaction(async tx => {
     await lockCompany(tx, user.companyId);
@@ -24,6 +26,7 @@ export async function saveKnowledge(user: SessionUser, input: unknown) {
   });
 }
 export async function knowledgeData(user: SessionUser) {
+  await assertFeature(user, "attendance", "view");
   assertAllowed(user, "gestor");
   return { sources: await db.select().from(aiKnowledge).where(eq(aiKnowledge.companyId, user.companyId)).orderBy(desc(aiKnowledge.updatedAt)).limit(300) };
 }

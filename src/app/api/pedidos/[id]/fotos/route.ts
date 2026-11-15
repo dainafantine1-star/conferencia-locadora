@@ -4,15 +4,12 @@ import { db } from "@/lib/db";
 import { attachments, returns } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import path from "path";
-import fs from "fs";
+import { putPrivateFile } from "@/lib/storage";
+import { assertFeature } from "@/lib/saas/access";
 import crypto from "crypto";
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
-
-function storageRoot(): string {
-  return path.resolve(process.env.STORAGE_DIR ?? path.join(process.cwd(), "storage"));
-}
 
 export async function POST(
   req: NextRequest,
@@ -20,6 +17,7 @@ export async function POST(
 ) {
   try {
     const { user } = await requireSession();
+    await assertFeature(user, "returns", "create");
     const { id } = await params;
     const order = await assertOrderAccess(id, user);
 
@@ -48,11 +46,8 @@ export async function POST(
     }
 
     const storedName = `${crypto.randomUUID()}${path.extname(file.name) || ".jpg"}`;
-    const dir = path.join(storageRoot(), user.companyId);
-    fs.mkdirSync(dir, { recursive: true });
-    const fullPath = path.join(dir, storedName);
     const buf = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(fullPath, buf);
+    await putPrivateFile(user.companyId, storedName, buf, file.type);
 
     const [att] = await db
       .insert(attachments)
@@ -84,6 +79,7 @@ export async function GET(
 ) {
   try {
     const { user } = await requireSession();
+    await assertFeature(user, "returns");
     const { id } = await params;
     await assertOrderAccess(id, user);
     const list = await db
