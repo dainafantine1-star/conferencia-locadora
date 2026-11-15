@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../../detali-identidade/tokens.css";
+@import "./brand-tokens.css";
 
 /* Existing neutral utilities adopt the warm palette. Semantic red, amber and
    emerald utilities keep their status meaning. */

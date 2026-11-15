@@ -1,0 +1,29 @@
+/* Integre ao tema existente. Medidas e cores auxiliares são propostas. */
+:root {
+  --detali-orange: #ff642e;
+  --detali-cream: #fff3e4;
+  --detali-ink: #251b23;
+  --detali-peach: #ffd4bb;
+  --detali-burnt: #a83216;
+  --detali-background: var(--detali-cream);
+  --detali-surface: #ffffff;
+  --detali-text: var(--detali-ink);
+  --detali-text-muted: #63565c;
+  --detali-border: #dacbc5;
+  --detali-action: var(--detali-burnt);
+  --detali-action-text: var(--detali-cream);
+  --detali-action-hover: #882712;
+  --detali-selected: var(--detali-peach);
+  --detali-focus: var(--detali-ink);
+  --detali-font-heading: "Bricolage Grotesque", system-ui, sans-serif;
+  --detali-font-body: "Inter", system-ui, sans-serif;
+  --detali-radius-control: 10px;
+  --detali-radius-card: 16px;
+  --detali-space-1: 4px;
+  --detali-space-2: 8px;
+  --detali-space-3: 12px;
+  --detali-space-4: 16px;
+  --detali-space-6: 24px;
+  --detali-space-8: 32px;
+  --detali-shadow: 0 4px 16px rgb(37 27 35 / 6%);
+}

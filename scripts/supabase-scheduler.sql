@@ -2,7 +2,7 @@
 -- Run as the database owner. Supply the production URL and CRON_SECRET through
 -- Vault separately; never put credentials in this script or cron.job.command.
 CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 
 CREATE OR REPLACE FUNCTION detali_private.invoke_production_job(job_name text)
 RETURNS bigint LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
