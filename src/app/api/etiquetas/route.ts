@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { scanLabels, catalogItems, auditLog } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { requireSession, requireGestor } from "@/lib/auth/session";
+import { requireSession, requirePermission } from "@/lib/auth/session";
 import { handle } from "@/lib/api/http";
 import crypto from "crypto";
 
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 /** Gera etiquetas em lote. */
 export async function POST(req: NextRequest) {
   return handle(async () => {
-    const { user } = await requireGestor();
+    const { user } = await requirePermission("estoque");
     const body = generateSchema.parse(await req.json());
 
     const [item] = await db

@@ -16,14 +16,18 @@ import {
   Legend,
 } from "recharts";
 
-export const PALETTE = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+export const PALETTE = ["#FF642E", "#251B23", "#A83216", "#FFD4BB", "#796970", "#E6B39A"];
 
 const tooltipStyle = {
   borderRadius: 10,
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--detali-border)",
   fontSize: 12,
   fontFamily: "inherit",
+  color: "var(--detali-ink)",
 };
+
+const tooltipItemStyle = { color: "var(--detali-ink)" };
+const legendText = (value: string) => <span style={{ color: "var(--detali-text-muted)" }}>{value}</span>;
 
 export function ReturnsAreaChart({
   data,
@@ -43,26 +47,26 @@ export function ReturnsAreaChart({
       <AreaChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <defs>
           <linearGradient id={`g-${yKey}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+            <stop offset="0%" stopColor="var(--detali-burnt)" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="var(--detali-burnt)" stopOpacity={0} />
           </linearGradient>
           {y2Key && (
             <linearGradient id={`g-${y2Key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+              <stop offset="0%" stopColor="var(--detali-ink)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--detali-ink)" stopOpacity={0} />
             </linearGradient>
           )}
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey={xKey} tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip contentStyle={tooltipStyle} />
-        {y2Key && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        <CartesianGrid strokeDasharray="3 3" stroke="#f8eee6" vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10, fill: "var(--detali-text-muted)" }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: "var(--detali-text-muted)" }} tickLine={false} axisLine={false} allowDecimals={false} />
+        <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
+        {y2Key && <Legend wrapperStyle={{ fontSize: 11 }} formatter={legendText} />}
         <Area
           type="monotone"
           dataKey={yKey}
           name="Devoluções"
-          stroke="#10b981"
+          stroke="var(--detali-burnt)"
           strokeWidth={2}
           fill={`url(#g-${yKey})`}
         />
@@ -71,7 +75,7 @@ export function ReturnsAreaChart({
             type="monotone"
             dataKey={y2Key}
             name="Unidades"
-            stroke="#3b82f6"
+            stroke="var(--detali-ink)"
             strokeWidth={2}
             fill={`url(#g-${y2Key})`}
           />
@@ -86,7 +90,7 @@ export function SimpleBarChart({
   xKey,
   yKey,
   height = 200,
-  color = "#3b82f6",
+  color = "var(--detali-ink)",
 }: {
   data: Record<string, string | number>[];
   xKey: string;
@@ -97,10 +101,10 @@ export function SimpleBarChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey={xKey} tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f8fafc" }} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#f8eee6" vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10, fill: "var(--detali-text-muted)" }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: "var(--detali-text-muted)" }} tickLine={false} axisLine={false} allowDecimals={false} />
+        <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} cursor={{ fill: "var(--detali-cream)" }} />
         <Bar dataKey={yKey} name="Pedidos" fill={color} radius={[6, 6, 0, 0]} maxBarSize={36} />
       </BarChart>
     </ResponsiveContainer>
@@ -132,8 +136,8 @@ export function DonutChart({
               <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
             ))}
           </Pie>
-          <Tooltip contentStyle={tooltipStyle} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} />
+          <Legend wrapperStyle={{ fontSize: 11 }} formatter={legendText} />
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">

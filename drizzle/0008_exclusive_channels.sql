@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "ai_settings_meta_phone_key" ON "ai_settings" USING btree (("preferences"->>'phoneId')) WHERE "ai_settings"."preferences"->>'whatsappProvider' = 'meta' and "ai_settings"."preferences"->>'phoneId' <> '';--> statement-breakpoint
+CREATE UNIQUE INDEX "ai_settings_waha_session_key" ON "ai_settings" USING btree (("preferences"->>'wahaUrl'),("preferences"->>'wahaSession')) WHERE "ai_settings"."preferences"->>'whatsappProvider' = 'waha' and "ai_settings"."preferences"->>'wahaSession' <> '';

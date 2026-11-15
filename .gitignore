@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -48,4 +49,14 @@ next-env.d.ts
 # artefatos de teste locais
 /metricas.json
 /docs/*.jpg
+/docs/erp/
+/docs/branding/screenshots/
+/docs/branding/*-validation.json
 
+# pacote original de referências (a identidade usada pelo app fica em public/brand)
+/detali-identidade/
+
+
+.vercel
+.env*
+!.env.example

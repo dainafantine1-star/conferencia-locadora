@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/sanitize-build-traces.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
@@ -12,27 +13,52 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
     "test": "vitest run",
-    "seed:labels": "tsx scripts/seed-labels.ts"
+    "seed:labels": "tsx scripts/seed-labels.ts",
+    "backup:worker": "node scripts/backup-scheduler.mjs",
+    "attendance:worker": "node scripts/attendance-worker.mjs",
+    "database:import": "tsx scripts/import-postgres.ts",
+    "backup:restore": "tsx scripts/restore-backup.ts",
+    "company:create": "tsx scripts/create-company.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.105",
+    "@ai-sdk/google": "^4.0.121",
+    "@ai-sdk/openai": "^4.0.118",
     "@electric-sql/pglite": "^0.5.16",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "ai": "^7.0.173",
+    "dotenv": "^18.0.10",
     "drizzle-orm": "^0.45.4",
     "next": "15.5.29",
     "next-auth": "^5.0.0-beta.32",
+    "nodemailer": "^10.5.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.5.438",
     "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "recharts": "^3.10.1",
     "zod": "^4.6.7"
   },
+  "overrides": {
+    "postcss": "^8.5.32",
+    "next-auth": {
+      "nodemailer": "$nodemailer"
+    },
+    "@auth/core": {
+      "nodemailer": "$nodemailer"
+    }
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^22.20.5",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "dotenv": "^18.0.10",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "15.5.29",

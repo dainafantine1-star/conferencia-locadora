@@ -1,21 +1,12 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
+import { db } from "../src/lib/db";
 import * as schema from "../src/lib/db/schema";
 import { hashPassword } from "../src/lib/auth/password";
-import path from "path";
-import fs from "fs";
 import { eq } from "drizzle-orm";
-
-const dataDir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
-fs.mkdirSync(dataDir, { recursive: true });
-const pglite = new PGlite(dataDir);
-const db = drizzle(pglite, { schema });
 
 async function main() {
   const existing = await db.select().from(schema.companies);
   if (existing.length > 0) {
     console.log("Seed já aplicado — pulando.");
-    await pglite.close();
     return;
   }
 
@@ -223,7 +214,6 @@ async function main() {
   console.log("  gestor@louca.demo / operador@louca.demo  → Louça & Festas Bahia");
   console.log("  gestor@outra.demo / operador@outra.demo  → Festas Imperial");
   console.log("Etiquetas demo: LOC-TACA-0001..0003 (unidade), LOC-CX-TA-12 (caixa +12), LOC-PRAT-0001");
-  await pglite.close();
 }
 
 main().catch((e) => {

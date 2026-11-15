@@ -20,8 +20,9 @@ function createDb() {
     // Produção / Vercel (ex.: Neon) — Postgres real
     const pool =
       globalForDb.__pgPool ??
-      new Pool({ connectionString, max: 10, ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false } });
-    if (process.env.NODE_ENV !== "production") globalForDb.__pgPool = pool;
+      new Pool({ connectionString, max: 10 });
+    // Compartilha o pool também em produção para evitar um pool por chunk/rota.
+    globalForDb.__pgPool = pool;
     return drizzlePg(pool, { schema });
   }
 
@@ -29,7 +30,7 @@ function createDb() {
   const dataDir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
   fs.mkdirSync(dataDir, { recursive: true });
   const pglite = globalForDb.__pglite ?? new PGlite(dataDir);
-  if (process.env.NODE_ENV !== "production") globalForDb.__pglite = pglite;
+  globalForDb.__pglite = pglite;
   return drizzlePglite(pglite, { schema });
 }
 

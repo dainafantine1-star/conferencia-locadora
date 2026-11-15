@@ -171,9 +171,9 @@ export default function RetornoPage() {
           const dm = damaged[b.orderItemId] ?? 0;
           const remaining = b.qtyOpen - g - dm;
           return (
-            <Card key={b.orderItemId} className="space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <Card key={b.orderItemId} className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
                   <p className="font-semibold">{b.name}</p>
                   <p className="text-xs text-slate-500">
                     Saiu {b.qtyDelivered} · já voltou {b.qtyGood + b.qtyDamaged} ·{" "}
@@ -193,6 +193,10 @@ export default function RetornoPage() {
                 >
                   {remaining} para conferir
                 </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-sm">
+                <p><span className="block text-xs text-slate-500">Previsto neste retorno</span><strong className="text-xl">{b.qtyOpen}</strong> {b.unit}</p>
+                <p><span className="block text-xs text-slate-500">Recebido agora</span><strong className="text-xl">{g + dm}</strong> {b.unit}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
@@ -231,10 +235,14 @@ export default function RetornoPage() {
                 </label>
               </div>
               {g + dm > b.qtyOpen && (
-                <p className="text-xs font-semibold text-red-600">
+                <p role="alert" className="text-xs font-semibold text-red-600">
                   Excede o saldo em aberto ({b.qtyOpen})
                 </p>
               )}
+              {remaining >= 0 && <p aria-live="polite" className={`rounded-lg px-3 py-2 text-sm font-medium ${remaining === 0 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
+                {remaining === 0 ? "✓ Quantidade conferida. Nenhuma unidade pendente." : `! Ainda faltam ${remaining} ${b.unit} para completar o retorno.`}
+                {dm > 0 && ` ${dm} ${b.unit} com avaria.`}
+              </p>}
             </Card>
           );
         })}

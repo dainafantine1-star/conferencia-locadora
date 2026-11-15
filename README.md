@@ -1,126 +1,79 @@
-# Conferência Locadora
+﻿# Detali — Gestão de locações
 
-MVP de conferência de **saída e devolução** de materiais para locadoras de festas. A equipe confere pelo celular; o gestor responde três perguntas antes de encerrar o pedido: **o que ainda está com o cliente, o que voltou danificado e quanto ficou pendente de reposição?**
+Sistema integrado de locações para eventos, com conferência de saída/devolução, estoque, comercial, financeiro, logística, loja e aplicativo web instalável.
+
+Consulte o [guia de operação e configuração](docs/OPERACAO-DETALI.md), o [relatório funcional](docs/STATUS-FUNCIONAL.md) e a [identidade visual](docs/branding/IMPLEMENTACAO.md). As integrações externas exigem credenciais e homologação. Nenhum pagamento, envio ou assinatura é confirmado por simulação.
+
+O **assistente no canto da tela** oferece ajuda de navegação e, com IA configurada, consultas e comandos com confirmação. **Atendimento e agentes**, no menu lateral, reúne WhatsApp oficial/WAHA, agentes, conhecimento e automações. Consulte o [guia do assistente, atendimento e Supabase](docs/ASSISTENTE-E-ATENDIMENTO.md) para configurar os provedores, o worker e a migração do banco.
+
+O módulo **Notas fiscais** prepara e solicita NF-e de produtos/remessas, consulta a autorização, baixa DANFE em PDF e XML e envia o PDF pelo WhatsApp do CRM. A emissão real exige configuração da empresa, certificado/credenciamento no provedor e tributação revisada pelo contador. Consulte o [guia fiscal](docs/NOTAS-FISCAIS.md).
 
 ## Stack
 
-| Camada | Escolha |
+Next.js 15, React 19, TypeScript, Tailwind CSS 4, Drizzle ORM, Auth.js v5 e Vitest. O desenvolvimento local usa PGlite; a produção aceita Postgres por `DATABASE_URL`. Fotos e backups precisam de armazenamento persistente.
+
+## Instalação sem demonstração
+
+1. Execute `npm ci` e copie `.env.example` para `.env.local`.
+2. Configure `AUTH_SECRET` e `APP_ENCRYPTION_KEY` com segredos aleatórios de pelo menos 32 caracteres. Configure banco e diretórios conforme o guia.
+3. Execute `npm run db:migrate`.
+4. Preencha as variáveis iniciais de empresa e gestor e execute `npm run company:create`. Remova a senha inicial do ambiente após criar a conta.
+5. Execute `npm run build` e `npm start`.
+6. Configure dados da locadora, inventário, preços, cláusulas e integrações pela área **Gestão**.
+
+No Windows, depois da compilação, `iniciar-detali.cmd` abre o servidor local. Mantenha essa janela aberta durante o uso; fechar o servidor interrompe o acesso pelo navegador.
+
+Em instalações existentes, preserve o banco, aplique as migrações aditivas e use a tela de equipe para administrar usuários. Não execute seed de demonstração em uma instalação comercial vazia.
+
+## Demonstração local
+
+Depois de configurar os segredos locais, `npm run db:setup` aplica migrações e cria dados exclusivamente demonstrativos. `npm run dev` inicia em `http://localhost:3000`.
+
+As contas e os dados do seed são exemplos. O banner com credenciais só aparece quando `NEXT_PUBLIC_DEMO_MODE=1`.
+
+## Comandos
+
+| Comando | Finalidade |
 | --- | --- |
-| Frontend / API | Next.js 15 (App Router) + TypeScript + Tailwind CSS 4 |
-| Banco | **PGlite embutido** em desenvolvimento local (sem Docker); **Postgres** via `DATABASE_URL` em produção (Neon/Vercel) |
-| ORM / migrações | Drizzle ORM + Drizzle Kit (SQL versionado em `drizzle/`) |
-| Auth | NextAuth (Auth.js v5) com JWT, perfis `gestor` e `operador`, multi-empresa (tenant) |
-| Testes | Vitest |
-| Fotos | Volume local privado (`STORAGE_DIR`), servidas por rota autenticada com validação de tenant |
+| `npm run dev` | Desenvolvimento local |
+| `npm run build` / `npm start` | Compilação e servidor |
+| `npm run db:migrate` | Migrações em PGlite ou Postgres |
+| `npm run company:create` | Empresa e gestor em base vazia |
+| `npm run db:seed` | Dados de demonstração |
+| `npm run seed:labels` | Etiquetas de demonstração |
+| `npm test` | Testes unitários e funcionais |
+| `npm run attendance:worker` | Processa mensagens e automações de atendimento |
+| `npm run database:import -- arquivo.detali fotos-novas` | Importa backup em PostgreSQL vazio definido por TARGET_DATABASE_URL |
+| `npm run lint` | Análise estática |
+| `npm run backup:worker` | Rotina de backups por HTTP autenticado |
+| `npm run backup:restore -- arquivo.detali diretorio-novo` | Recuperação em diretório vazio |
 
-## Instalação (local, sem Docker)
+## Fluxo de operação
 
-```bash
-npm install
-cp .env.example .env.local
-npm run db:setup             # aplica migrações + dados de demonstração
-npm run dev                  # http://localhost:3000
-```
+Cadastre clientes e produtos; informe inventário e preços de locação separados dos valores de reposição/avaria. O orçamento pode gerar contrato, pedido e parcelas em uma transação. O sistema reserva materiais e impede contratar estoque insuficiente.
 
-Sem `DATABASE_URL`, o app usa PGlite em `.data/pglite/` (criado automaticamente).
+Confirme a saída pelo pedido. Registre cada devolução com quantidades boas e avariadas, leitura de etiquetas e fotos. Unidades avariadas ficam indisponíveis até reparo. O gestor confirma faltas e encerra a conferência; faltas geram movimentação de perda e cobrança vinculada ao financeiro. Reaberturas preservam recebimentos e recalculam diferenças/reembolsos.
 
-### Variáveis de ambiente
+A baixa financeira é manual, com pagamento conferido, ou baseada em notificação autenticada do PagBank. Comissões seguem a regra configurada na emissão. Usuários recebem permissões por módulo, verificadas no servidor a cada requisição.
 
-| Variável | Obrigatória | Descrição |
-| --- | --- | --- |
-| `DATABASE_URL` | produção | Postgres (ex.: Neon). Vazio/local → PGlite |
-| `AUTH_SECRET` | produção | Segredo do Auth.js (`openssl rand -base64 32`) |
-| `AUTH_URL` | produção | URL base (`https://seu-app.vercel.app`) |
-| `STORAGE_DIR` | não | Pasta das fotos (padrão `./storage`) |
-| `DEFAULT_TIMEZONE` | não | Fuso das empresas (padrão `America/Bahia`) |
+## Agenda e disponibilidade
 
-### Comandos
+Na Agenda, selecione uma data. O gestor pode cadastrar horários, capacidade e ocupação manual. Horários com capacidade zero ficam bloqueados; dias sem horários ficam não configurados. As vagas são um controle manual independente dos pedidos.
 
-```bash
-npm run db:generate   # gera nova migração SQL em drizzle/
-npm run db:migrate    # aplica migrações no banco local
-npm run db:seed       # dados fictícios (idempotente)
-npm run db:setup      # migrate + seed
-npm run lint
-npm test
-npx tsc --noEmit
-npm run build
-```
+A disponibilidade de materiais considera o período inclusive, reservas simultâneas, devoluções parciais, atrasos e unidades bloqueadas por avaria/manutenção. Rascunhos também reservam. Estoque em branco significa desconhecido, e zero significa indisponível. Gestão → Estoque permite consultar um intervalo completo. A ação de copiar disponibilidade usa os dados consultados.
 
-## Dados de demonstração
+## Loja, celular e serviços externos
 
-Senha de todos: **`demo1234`**
+A loja publica produtos, destaques, banners e páginas da própria empresa. Solicitações de orçamento e contato são persistidas com protocolo. O aplicativo é uma PWA online, integrada ao mesmo sistema, instalável pelo navegador. A operação offline não simula alterações.
 
-| E-mail | Perfil | Empresa |
-| --- | --- | --- |
-| `gestor@louca.demo` | Gestor | Louça & Festas Bahia |
-| `operador@louca.demo` | Operador | Louça & Festas Bahia |
-| `gestor@outra.demo` | Gestor | Festas Imperial |
-| `operador@outra.demo` | Operador | Festas Imperial |
+Configure SMTP, WhatsApp Business Cloud, PagBank e ZapSign em Gestão → Configurações. Contratos exigem dados das partes e cláusulas fornecidas pela locadora. Os estados de envio/pagamento/assinatura refletem apenas o que foi registrado ou confirmado pelo serviço.
 
-O seed cria o cenário das taças (pedido **#1001**: 120 previstas / 118 saídas), um pedido com retorno **hoje** (painel) e um pedido em outra locadora (isolamento de tenant).
+## Dados e implantação
 
-## Fluxo do MVP
+Dinheiro é calculado em centavos inteiros. Os dados são separados por empresa. Segredos ficam fora do repositório; credenciais de integrações são criptografadas no banco. Guarde a chave de criptografia para recuperar credenciais e backups.
 
-1. **Pedido** — cliente, evento, datas e itens previstos (catálogo).
-2. **Saída** — confirma quantidade *efetivamente* entregue; copia valores de reposição/avaria para o pedido.
-3. **Retorno** — uma ou mais etapas; botão “Voltou tudo em bom estado”; fotos; saldo antes de salvar; idempotência e trava por item no servidor.
-4. **Fechamento** (gestor) — confirmação explícita da falta; cálculo em centavos (falta × reposição + avaria × avaria).
-5. **Cobrança** — ajuste com justificativa, resumo copiável + WhatsApp (`wa.me`), baixa manual (pendente/recebida/dispensada).
-6. **Reabertura** (gestor) — motiva, preserva fechamento anterior e sinaliza diferença se já houve recebimento.
-7. **Painel** — hoje, atrasados, em conferência, cobrança pendente (fuso da empresa).
+Sem `DATABASE_URL`, o banco fica em `PGLITE_DIR` (padrão `.data/pglite`) e deve ser usado por uma única instância do servidor. Com Postgres, configure TLS na URL conforme o provedor. Use volumes persistentes para fotos e backups. Arquivos locais de funções serverless não constituem armazenamento definitivo; consulte o guia antes de escolher a hospedagem.
 
-## Bipagem (etiquetas)
+## Arquivos publicados
 
-Duas formas de contagem automática pela câmera do celular (ou digitação do código):
-
-| Tipo | O que é | Quanto conta por bipagem |
-| --- | --- | --- |
-| **Unidade** | 1 código por peça física (ex.: cada taça) | **1** unidade |
-| **Caixa/kit** | 1 código por caixa (ex.: caixa com 12 taças) | **N** unidades (definido ao gerar) |
-
-- **Gerar:** no **Catálogo** → “Etiquetas para bipagem” → escolher item, tipo e quantidade → *Gerar etiquetas* → *Imprimir* (recortar e colar).
-- **Bipar:** nas telas de **saída** e **retorno**, abrir a câmera (Chrome/Android lê QR/código de barras sozinho) ou digitar o código. Cada leitura soma no item correspondente e mostra o progresso (ex.: 170/182).
-- Códigos demo: `LOC-TACA-0001`…`0003` (unidade), `LOC-CX-TA-12` (caixa +12), `LOC-PRAT-0001`.
-- Etiquetas ficam na tabela `scan_labels`, validadas no servidor contra o tenant do pedido.
-
-## Roteiro de apresentação (~10 min)
-
-1. Login como **operador** → painel (pedido com retorno hoje).
-2. Abrir **#1001** → conferência de saída 120 → 118.
-3. Registrar devolução: 100 bons + 2 avariadas → saldo em aberto reduz.
-4. Segunda devolução: 10 bons → saldo 6 em aberto.
-5. Login **gestor** → fechamento → confirmar 6 faltantes → **R$ 96,00**.
-6. Ajuste de R$ 12 com justificativa → **R$ 84,00** → copiar resumo / abrir WhatsApp (não enviar).
-7. Trocar para **Festas Imperial** (`gestor@outra.demo`) → não vê os pedidos da outra locadora.
-
-## Permissões (resumo)
-
-- **Operador**: cria pedidos, confirma saída, registra devolução e fotos, bipa etiquetas.
-- **Gestor**: tudo do operador + catálogo/clientes/equipe/**geração de etiquetas**, fechamento, ajuste de cobrança, baixa e reabertura.
-- Validação **no servidor** em todas as rotas; fotos só da própria empresa (mesmo com o ID conhecido).
-
-## Deploy (Vercel)
-
-1. Criar projeto no Vercel e banco **Neon** (ou Postgres compatível).
-2. Variáveis: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`.
-3. Aplicar migrações: `DATABASE_URL=... npx drizzle-kit push` (ou executar os `.sql` de `drizzle/`).
-4. **Fotos**: o filesystem da Vercel é efêmero — em produção use armazenamento externo (S3/R2) — ver roadmap.
-5. Seed de produção: os scripts atuais usam PGlite local; em produção aplique dados iniciais via SQL (roadmap: seed com `DATABASE_URL`).
-
-## Roadmap (fora do MVP)
-
-- Comprovantes de saída/devolução com aceite do cliente
-- Estoque e reservas por data, kits, conflitos de evento
-- QR por caixa, offline com sincronização, rotas *(unidade e caixa já no MVP; falta offline e impressão com QR gráfico)*
-- Orçamento → pedido, caução, Pix, conciliação, notificações WhatsApp
-- Multi-unidade, permissões detalhadas, relatórios
-- Storage de fotos em nuvem (Vercel/S3)
-- Integração oficial WhatsApp / gateway de pagamento
-
-## Decisões que afetam instalação/publicação
-
-- **Sem Docker**: banco local embutido (PGlite) → zero setup; produção = Postgres gerenciado.
-- Migrações SQL versionadas em `drizzle/`; banco local rastreia o que foi aplicado.
-- Segredos fora do repositório (`.env.local` no `.gitignore`).
-- Cálculos de dinheiro sempre em **centavos inteiros**.
+O repositório contém o código, as migrações, os testes, os recursos visuais usados pelo aplicativo e o exemplo de configuração sem credenciais. Banco local, uploads, backups, segredos, pacote original de referências e artefatos locais de auditoria não são publicados. Os relatórios e capturas citados nos guias foram produzidos na instalação local; os caminhos em `docs/erp` e `docs/branding/screenshots` não acompanham o Git. Os testes automatizados podem ser executados com `npm test`.

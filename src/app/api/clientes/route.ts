@@ -1,15 +1,11 @@
+import { createCustomer, updateCustomer } from '@/lib/erp/customer';
 import { NextRequest } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { customers } from "@/lib/db/schema";
 import { eq, and, ilike, desc } from "drizzle-orm";
 import { requireSession } from "@/lib/auth/session";
 import { handle } from "@/lib/api/http";
-
-const createSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
-  phone: z.string().optional().default(""),
-});
+import { requirePermission } from "@/lib/auth/session";
 
 export async function GET(req: NextRequest) {
   return handle(async () => {
@@ -31,12 +27,13 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   return handle(async () => {
-    const { user } = await requireSession();
-    const body = createSchema.parse(await req.json());
-    const [customer] = await db
-      .insert(customers)
-      .values({ companyId: user.companyId, name: body.name, phone: body.phone ?? "" })
-      .returning();
-    return { customer };
+    const { user } = await requirePermission('clientes');
+    return createCustomer(user, await req.json());
+  });
+}
+export async function PATCH(req: NextRequest) {
+  return handle(async () => {
+    const { user } = await requirePermission('clientes');
+    return updateCustomer(user, await req.json());
   });
 }

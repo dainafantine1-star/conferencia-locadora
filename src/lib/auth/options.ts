@@ -9,6 +9,7 @@ import { eq, and } from "drizzle-orm";
 import { verifyPassword } from "@/lib/auth/password";
 
 type AppUser = User & {
+  authVersion: number;
   companyId: string;
   role: "gestor" | "operador";
   companyName: string;
@@ -22,6 +23,7 @@ type AppSession = Session & {
     role: "gestor" | "operador";
     companyName: string;
     timezone: string;
+    authVersion: number;
   } & Session["user"];
 };
 
@@ -71,6 +73,7 @@ const authOptions = {
           role: membership.role,
           companyName: membership.companyName,
           timezone: membership.timezone,
+          authVersion: user.authVersion,
         } satisfies AppUser;
       },
     }),
@@ -84,6 +87,7 @@ const authOptions = {
         token.role = u.role;
         token.companyName = u.companyName;
         token.timezone = u.timezone;
+        token.authVersion = u.authVersion;
       }
       return token;
     },
@@ -95,6 +99,7 @@ const authOptions = {
         s.user.role = token.role as "gestor" | "operador";
         s.user.companyName = (token.companyName as string) ?? "";
         s.user.timezone = (token.timezone as string) ?? "America/Bahia";
+        s.user.authVersion = (token.authVersion as number) ?? 1;
       }
       return s;
     },

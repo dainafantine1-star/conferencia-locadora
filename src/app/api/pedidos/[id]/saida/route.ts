@@ -32,6 +32,9 @@ export async function POST(
     const itemIds = body.lines.map((l) => l.orderItemId);
 
     await db.transaction(async (tx) => {
+      const [lockedOrder] = await tx.select().from(orders)
+        .where(and(eq(orders.id, order.id), eq(orders.companyId, user.companyId))).for("update");
+      if (!lockedOrder || lockedOrder.status !== "rascunho") throw new Error("Saída já confirmada ou pedido indisponível");
       const items = await tx
         .select()
         .from(orderItems)
@@ -57,7 +60,8 @@ export async function POST(
         const cats = await tx
           .select()
           .from(catalogItems)
-          .where(inArray(catalogItems.id, catalogIds));
+          .where(and(inArray(catalogItems.id, catalogIds), eq(catalogItems.companyId, user.companyId)));
+        if (cats.length !== new Set(catalogIds).size) throw new Error("Item de catálogo inválido para esta empresa");
         for (const c of cats) {
           catalogMap.set(c.id, {
             replacementCents: c.replacementCents,

@@ -5,6 +5,8 @@ import {
   returns,
   returnItems,
   auditLog,
+  catalogItems,
+  stockMovements,
 } from "@/lib/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import {
@@ -59,11 +61,14 @@ export async function registerReturn(
 
     if (input.idempotencyKey) {
       const [existing] = await tx
-        .select({ id: returns.id })
+        .select({ id: returns.id, orderId: returns.orderId, companyId: returns.companyId })
         .from(returns)
         .where(eq(returns.idempotencyKey, input.idempotencyKey))
         .limit(1);
       if (existing) {
+        if (existing.orderId !== order.id || existing.companyId !== user.companyId) {
+          throw new AuthError("Chave de devolução inválida para este pedido", 400);
+        }
         const balances = await loadBalances(tx, order.id);
         return { returnId: existing.id, duplicated: true, balances };
       }
@@ -113,6 +118,11 @@ export async function registerReturn(
 
     const validationError = validateReturnQuantities(planned);
     if (validationError) throw new Error(validationError);
+    const damageByCatalog = new Map<string, number>();
+    for (const line of input.lines) {
+      const item = items.find(i => i.id === line.orderItemId);
+      if (item?.catalogItemId && line.qtyDamaged > 0) damageByCatalog.set(item.catalogItemId, (damageByCatalog.get(item.catalogItemId) ?? 0) + line.qtyDamaged);
+    }
 
     const [ret] = await tx
       .insert(returns)
@@ -124,6 +134,14 @@ export async function registerReturn(
         idempotencyKey: input.idempotencyKey ?? null,
       })
       .returning();
+    for (const [id, qty] of [...damageByCatalog].sort(([a], [b]) => a.localeCompare(b))) {
+      const [catalog] = await tx.select().from(catalogItems).where(and(eq(catalogItems.id, id), eq(catalogItems.companyId, user.companyId))).for("update");
+      if (!catalog) throw new Error("Item de catálogo inválido para esta empresa");
+      if (catalog.stockQty !== null && catalog.unavailableQty + qty > catalog.stockQty) throw new Error("Avarias excedem o estoque cadastrado; confira o inventário");
+      await tx.update(catalogItems).set({ unavailableQty: catalog.unavailableQty + qty }).where(eq(catalogItems.id, id));
+      await tx.insert(stockMovements).values({ companyId: user.companyId, catalogItemId: id, kind: "avaria_retorno",
+        unavailableDelta: qty, reason: "Avaria registrada na devolução", referenceId: ret.id, createdBy: user.id });
+    }
 
     if (input.lines.length > 0) {
       await tx.insert(returnItems).values(

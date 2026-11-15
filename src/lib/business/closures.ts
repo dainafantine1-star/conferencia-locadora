@@ -1,6 +1,9 @@
 import { db } from "@/lib/db";
-import { orders, orderItems, returns, returnItems, closures, billingEvents, auditLog } from "@/lib/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { orders, orderItems, returns, returnItems, closures, billingEvents, auditLog, financialEntries, settlements } from "@/lib/db/schema";
+import { eq, and, inArray, sql } from "drizzle-orm";
+import { lockCompany, localDay, assertNoOpenCheckout } from "@/lib/erp/common";
+import { createConferenceCharge, creditReopenedCharges, priorConferenceReceipts, changeConferenceStock, restoreConferenceStock } from "@/lib/erp/conference";
+import { recordSettlement } from "@/lib/erp/finance";
 import { computeBalances, calculateClosing, applyAdjustment, buildSummaryText, buildWhatsAppUrl } from "@/lib/business/types";
 import type { SessionUser } from "@/lib/auth/session";
 import { AuthError } from "@/lib/auth/session";
@@ -21,6 +24,7 @@ export async function loadOrderBalances(orderId: string) {
 
 export async function closeOrder(input: CloseOrderInput, user: SessionUser) {
   return db.transaction(async (tx) => {
+    await lockCompany(tx, user.companyId);
     const [order] = await tx
       .select()
       .from(orders)
@@ -62,20 +66,22 @@ export async function closeOrder(input: CloseOrderInput, user: SessionUser) {
       })
       .returning();
 
+    const charge = await createConferenceCharge(tx, user, order, closure);
+    await changeConferenceStock(tx, user, closure.id, order.id, calc.perItem);
     await tx.update(orders).set({
       status: "encerrado",
       closedAt: closure.closedAt,
       closedBy: user.id,
       activeClosureId: closure.id,
-      billingStatus: finalCents > 0 ? "pendente" : "sem_cobranca",
+      billingStatus: charge.billingStatus,
     }).where(eq(orders.id, order.id));
 
-    if (finalCents > 0) {
+    if (charge.amountDue > 0) {
       await tx.insert(billingEvents).values({
         orderId: order.id,
         companyId: order.companyId,
         status: "pendente",
-        amountCents: finalCents,
+        amountCents: charge.amountDue,
         note: "Fechamento do pedido",
         createdBy: user.id,
       });
@@ -104,6 +110,7 @@ export async function adjustCharge(input: {
   }
 
   return db.transaction(async (tx) => {
+    await lockCompany(tx, user.companyId);
     const [order] = await tx
       .select()
       .from(orders)
@@ -120,8 +127,14 @@ export async function adjustCharge(input: {
       .where(eq(closures.id, order.activeClosureId))
       .for("update");
     if (!closure || !closure.active) throw new Error("Fechamento ativo não encontrado");
+    if (order.billingStatus === "recebida" || order.billingStatus === "dispensada") {
+      throw new AuthError("Ajuste indisponível: a cobrança já foi baixada", 400);
+    }
 
     const finalCents = applyAdjustment(closure.suggestedCents, input.adjustmentCents);
+    if (await priorConferenceReceipts(tx, order.id) > 0) {
+      throw new AuthError("Ajuste com recebimentos anteriores exige reabertura e conciliação", 400);
+    }
 
     await tx
       .update(closures)
@@ -134,12 +147,24 @@ export async function adjustCharge(input: {
       })
       .where(eq(closures.id, closure.id));
 
-    // Atualiza valor pendente, se for o caso (sem estorno automático)
-    if (order.billingStatus === "pendente") {
+    const billingStatus = finalCents > 0 ? "pendente" : "sem_cobranca";
+    const [entry] = await tx.select().from(financialEntries).where(eq(financialEntries.closureId, closure.id)).for("update");
+    if (entry) {
+      await assertNoOpenCheckout(tx, user.companyId, entry.id);
+      const [{ paid }] = await tx.select({ paid: sql<number>`coalesce(sum(${settlements.amountCents}),0)::int` }).from(settlements).where(eq(settlements.entryId, entry.id));
+      if (paid > 0 || entry.direction !== "receber") throw new AuthError("Ajuste com pagamento exige reabertura e conciliação", 400);
+      await tx.update(financialEntries).set({ amountCents: finalCents, creditedCents: 0 }).where(eq(financialEntries.id, entry.id));
+    } else if (finalCents > 0) {
+      await tx.insert(financialEntries).values({ companyId: user.companyId, customerId: order.customerId,
+        closureId: closure.id, direction: "receber", category: "reposicao", description: `Reposição · pedido #${order.number}`,
+        amountCents: finalCents, dueDate: localDay(user.timezone), createdBy: user.id });
+    }
+    await tx.update(orders).set({ billingStatus }).where(eq(orders.id, order.id));
+    if (order.billingStatus === "pendente" || order.billingStatus === "sem_cobranca") {
       await tx.insert(billingEvents).values({
         orderId: order.id,
         companyId: order.companyId,
-        status: "pendente",
+        status: billingStatus,
         amountCents: finalCents,
         note: `Ajuste: ${input.reason.trim()}`,
         createdBy: user.id,
@@ -162,6 +187,7 @@ export async function reopenOrder(input: { orderId: string; reason: string }, us
   if (!input.reason.trim()) throw new Error("Motivo da reabertura é obrigatório");
 
   return db.transaction(async (tx) => {
+    await lockCompany(tx, user.companyId);
     const [order] = await tx
       .select()
       .from(orders)
@@ -172,6 +198,8 @@ export async function reopenOrder(input: { orderId: string; reason: string }, us
 
     let priorReceivedCents: number | null = null;
     if (order.billingStatus === "recebida") {
+      const [linked] = await tx.select({ id: financialEntries.id }).from(financialEntries).where(eq(financialEntries.closureId, order.activeClosureId!));
+      if (!linked) throw new AuthError("Concilie a cobrança antiga no Financeiro antes de reabrir o pedido", 400);
       const receivedEvents = await tx
         .select()
         .from(billingEvents)
@@ -180,12 +208,16 @@ export async function reopenOrder(input: { orderId: string; reason: string }, us
     }
 
     if (order.activeClosureId) {
+      await creditReopenedCharges(tx, user, order.id);
+      await restoreConferenceStock(tx, user, order.activeClosureId);
       await tx
         .update(closures)
         .set({ active: false, reopenedAt: new Date(), reopenedBy: user.id, reopenReason: input.reason.trim() })
         .where(eq(closures.id, order.activeClosureId));
     }
 
+    const receipts = await priorConferenceReceipts(tx, order.id);
+    if (receipts > 0) priorReceivedCents = receipts;
     await tx
       .update(orders)
       .set({ status: "aberto", closedAt: null, closedBy: null, activeClosureId: null })
@@ -209,17 +241,45 @@ export async function setBillingStatus(input: {
   note?: string;
 }, user: SessionUser) {
   return db.transaction(async (tx) => {
+    await lockCompany(tx, user.companyId);
     const [order] = await tx
       .select()
       .from(orders)
       .where(and(eq(orders.id, input.orderId), eq(orders.companyId, user.companyId)))
       .for("update");
     if (!order) throw new AuthError("Pedido não encontrado", 404);
+    if (order.status !== "encerrado" || !order.activeClosureId) {
+      throw new AuthError("Cobrança permitida apenas após o fechamento", 400);
+    }
 
     let amountCents: number | null = null;
     if (order.activeClosureId) {
       const [closure] = await tx.select().from(closures).where(eq(closures.id, order.activeClosureId));
       amountCents = closure?.finalCents ?? null;
+    }
+    if (amountCents === null) throw new AuthError("Fechamento ativo não encontrado", 400);
+    if ((amountCents === 0 && input.status !== "sem_cobranca") || (amountCents > 0 && input.status === "sem_cobranca")) {
+      throw new AuthError("Status de cobrança inválido para este valor", 400);
+    }
+    if (order.billingStatus === input.status) return { status: input.status };
+    if (order.billingStatus === "recebida" || order.billingStatus === "dispensada") {
+      throw new AuthError("Cobrança já baixada; alteração requer conciliação", 400);
+    }
+    const [entry] = await tx.select().from(financialEntries).where(eq(financialEntries.closureId, order.activeClosureId));
+    if (!entry && amountCents > 0) throw new AuthError("Concilie a cobrança antiga no Financeiro antes de registrar a baixa", 400);
+    if (entry && entry.direction === "receber") {
+      await assertNoOpenCheckout(tx, user.companyId, entry.id);
+      const [{ paid }] = await tx.select({ paid: sql<number>`coalesce(sum(${settlements.amountCents}),0)::int` }).from(settlements).where(eq(settlements.entryId, entry.id));
+      const balance = entry.amountCents - entry.creditedCents - paid;
+      if (input.status === "recebida" && balance > 0) {
+        await recordSettlement(tx, user, { entryId: entry.id, amountCents: balance, method: "outro",
+          note: input.note || "Baixa manual na conferência", idempotencyKey: `conference:${entry.id}` });
+        return { status: input.status };
+      }
+      if (input.status === "dispensada" || input.status === "sem_cobranca") {
+        if (paid > 0) throw new AuthError("Cobrança com recebimento exige conciliação", 400);
+        await tx.update(financialEntries).set({ creditedCents: entry.amountCents, cancelReason: input.note || "Dispensa na conferência" }).where(eq(financialEntries.id, entry.id));
+      }
     }
 
     await tx.update(orders).set({ billingStatus: input.status }).where(eq(orders.id, order.id));

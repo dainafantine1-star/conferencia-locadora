@@ -1,64 +1,29 @@
+﻿import { config } from "dotenv";
 import { PGlite } from "@electric-sql/pglite";
-import fs from "fs";
-import path from "path";
-
+import { Client } from "pg";
+import fs from "node:fs";
+import path from "node:path";
+config({ path: ".env.local", quiet: true }); config({ quiet: true });
 async function main() {
-  const dataDir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
-  fs.mkdirSync(dataDir, { recursive: true });
-
-  const pglite = new PGlite(dataDir);
-
-  const drizzleDir = path.join(process.cwd(), "drizzle");
-  const files = fs.existsSync(drizzleDir)
-    ? fs
-        .readdirSync(drizzleDir)
-        .filter((f) => f.endsWith(".sql"))
-        .sort()
-    : [];
-
-  if (files.length === 0) {
-    console.log("Nenhuma migracao em ./drizzle. Rode `npm run db:generate` primeiro.");
-    await pglite.close();
-    return;
-  }
-
-  await pglite.exec(`
-    CREATE TABLE IF NOT EXISTS drizzle_migrations (
-      filename text PRIMARY KEY,
-      applied_at timestamptz NOT NULL DEFAULT now()
-    );
-  `);
-
-  const appliedResult = await pglite.query<{ filename: string }>(
-    "SELECT filename FROM drizzle_migrations",
-  );
-  const appliedSet = new Set((appliedResult.rows ?? []).map((r) => r.filename));
-
-  for (const file of files) {
-    if (appliedSet.has(file)) {
-      console.log(`= ${file} (ja aplicada)`);
-      continue;
+  const directory = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data", "pglite");
+  const client = process.env.DATABASE_URL ? new Client({ connectionString: process.env.DATABASE_URL }) : new PGlite(directory);
+  if (client instanceof Client) await client.connect();
+  const query = (source: string, values?: unknown[]) => client instanceof Client ? client.query(source, values) : client.query<Record<string, unknown>>(source, values);
+  try {
+    await query("create table if not exists drizzle_migrations (filename text primary key, applied_at timestamptz not null default now())");
+    const applied = await query("select filename from drizzle_migrations");
+    const known = new Set(applied.rows.map(r => String(r.filename)));
+    for (const file of fs.readdirSync("drizzle").filter(f => /^\d+_.*\.sql$/.test(f)).sort()) {
+      if (known.has(file)) { console.log("=", file); continue; }
+      await query("BEGIN");
+      try {
+        const source = fs.readFileSync(path.join("drizzle", file), "utf8");
+        for (const statement of source.split("--> statement-breakpoint").filter(s => s.trim())) await query(statement);
+        await query("insert into drizzle_migrations (filename) values ($1)", [file]);
+        await query("COMMIT"); console.log("Aplicada:", file);
+      } catch (error) { await query("ROLLBACK"); throw error; }
     }
-    const sql = fs.readFileSync(path.join(drizzleDir, file), "utf8");
-    console.log(`> aplicando ${file}`);
-    await pglite.exec("BEGIN");
-    try {
-      await pglite.exec(sql);
-      await pglite.exec(
-        `INSERT INTO drizzle_migrations (filename) VALUES ('${file.replace(/'/g, "''")}')`,
-      );
-      await pglite.exec("COMMIT");
-    } catch (e) {
-      await pglite.exec("ROLLBACK");
-      throw e;
-    }
-  }
-
-  console.log("Migracoes concluidas.");
-  await pglite.close();
+    console.log("Migrações concluídas.");
+  } finally { if (client instanceof Client) await client.end(); else await client.close(); }
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main().catch(error => { console.error(error); process.exit(1); });

@@ -7,6 +7,7 @@ type Item = {
   id: string;
   name: string;
   unit: string;
+  stockQty: number | null;
   replacementCents: number;
   damageCents: number | null;
 };
@@ -24,8 +25,11 @@ type Label = {
 export default function CatalogoPage() {
   const { toast, el } = useToast();
   const [items, setItems] = useState<Item[] | null>(null);
+  const [canManage, setCanManage] = useState(false);
   const [labels, setLabels] = useState<Label[]>([]);
   const [name, setName] = useState("");
+  const [stock, setStock] = useState("");
+  const [stockSaving, setStockSaving] = useState<string | null>(null);
   const [unit, setUnit] = useState("un");
   const [repl, setRepl] = useState("");
   const [dmg, setDmg] = useState("");
@@ -42,7 +46,7 @@ export default function CatalogoPage() {
   const load = () => {
     fetch("/api/catalogo")
       .then((r) => r.json())
-      .then((d) => setItems(d.items))
+      .then((d) => { setItems(d.items); setCanManage(Boolean(d.canManage)); })
       .catch(() => setError("Falha ao carregar"));
     fetch("/api/etiquetas")
       .then((r) => (r.ok ? r.json() : { labels: [] }))
@@ -67,6 +71,7 @@ export default function CatalogoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
+          stockQty: stock.trim() ? Number(stock) : null,
           unit: unit || "un",
           replacementCents,
           damageCents: damageCentsRaw,
@@ -76,6 +81,7 @@ export default function CatalogoPage() {
       if (!res.ok) throw new Error(d.error);
       toast("Item adicionado");
       setName("");
+      setStock("");
       setRepl("");
       setDmg("");
       load();
@@ -119,38 +125,17 @@ export default function CatalogoPage() {
     }
   }
 
-  function printLabels() {
-    const w = window.open("", "_blank");
-    if (!w) {
-      toast("Permita pop-ups para imprimir");
-      return;
-    }
-    const rows = labels
-      .map(
-        (l) => `
-      <div style="border:1px dashed #333;padding:8px;margin:4px;display:inline-block;text-align:center;font-family:monospace">
-        <div style="font-size:10px">${l.catalogName}${l.kind === "caixa" ? ` · caixa ${l.qty}` : ""}</div>
-        <div style="font-size:16px;font-weight:bold">${l.code}</div>
-        <div style="font-size:9px">${l.kind === "caixa" ? `+${l.qty} ${l.unit}` : l.unit}</div>
-      </div>`,
-      )
-      .join("");
-    w.document.write(`<!doctype html><html><head><title>Etiquetas</title></head>
-      <body style="font-family:sans-serif"><h2>Etiquetas (${labels.length})</h2>
-      <p>Imprima, recorte e cole no item/caixa. Depois bipar na saída ou retorno.</p>
-      ${rows}
-      <script>window.print()</script></body></html>`);
-    w.document.close();
-  }
+  function printLabels() { window.open("/api/etiquetas/imprimir", "_blank", "noopener,noreferrer"); }
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Catálogo</h1>
       {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-      <Card className="space-y-3">
+      {canManage && <Card className="space-y-3">
         <h2 className="font-semibold">Novo item</h2>
         <Input label="Nome" value={name} onChange={(e) => setName(e.target.value)} placeholder="Taça de cristal" />
+        <Input label="Estoque total (opcional)" type="number" min={0} step={1} value={stock} onChange={(e) => setStock(e.target.value)} placeholder="Quantidade para locação" />
         <div className="grid grid-cols-3 gap-2">
           <Input label="Unidade" value={unit} onChange={(e) => setUnit(e.target.value)} />
           <Input
@@ -174,7 +159,7 @@ export default function CatalogoPage() {
         <Button onClick={add} disabled={saving}>
           {saving ? "Salvando…" : "Adicionar"}
         </Button>
-      </Card>
+      </Card>}
 
       <Card className="space-y-3">
         <h2 className="font-semibold">Etiquetas para bipagem</h2>
@@ -254,6 +239,21 @@ export default function CatalogoPage() {
                 <Card className="flex items-center justify-between">
                   <div>
                     <p className="font-semibold">{it.name}</p>
+                    {canManage && <form className="my-2 flex flex-wrap items-end gap-2" onSubmit={async (e) => {
+                      e.preventDefault();
+                      const value = new FormData(e.currentTarget).get("stock") as string;
+                      setStockSaving(it.id);
+                      try {
+                        const r = await fetch("/api/catalogo", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: it.id, stockQty: value.trim() ? Number(value) : null }) });
+                        const d = await r.json();
+                        if (!r.ok) throw new Error(d.error);
+                        toast("Estoque atualizado"); load();
+                      } catch (e) { toast(e instanceof Error ? e.message : "Falha ao atualizar"); }
+                      finally { setStockSaving(null); }
+                    }}>
+                      <Input key={it.stockQty ?? "empty"} label="Estoque total" name="stock" type="number" min={0} step={1} defaultValue={it.stockQty ?? ""} placeholder="Não informado" />
+                      <Button type="submit" variant="secondary" disabled={stockSaving === it.id}>Salvar estoque</Button>
+                    </form>}
                     <p className="text-sm text-slate-500">
                       Reposição {money(it.replacementCents)} · Avaria{" "}
                       {it.damageCents != null ? money(it.damageCents) : "—"} / {it.unit}

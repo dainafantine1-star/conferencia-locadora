@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { AuthError } from "@/lib/auth/session";
 import { ZodError } from "zod";
+import { CredentialError } from "@/lib/erp/crypto";
 
 export function jsonError(error: unknown): NextResponse {
+  if (error instanceof SyntaxError) return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  if (error instanceof CredentialError) return NextResponse.json({ error: error.message }, { status: 503 });
   if (error instanceof AuthError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }

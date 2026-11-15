@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card, Badge, Spinner, Button, money, useToast, EmptyState } from "@/components/ui";
 
 type Detail = {
+  canManage: boolean;
   order: {
     id: string;
     number: number;
@@ -165,7 +166,7 @@ export default function PedidoDetalhePage() {
   if (!data) return <Spinner label="Carregando pedido…" />;
 
   const { order, customer, items, balances, closing, returns, closure } = data;
-  const isOperator = false; // botões sensíveis aparecem; servidor valida o papel
+  const isOperator = !data.canManage;
 
   return (
     <div className="space-y-4">
@@ -198,7 +199,8 @@ export default function PedidoDetalhePage() {
         <>
           <Card>
             <h2 className="mb-2 font-semibold">Saldo em aberto</h2>
-            <table className="w-full text-sm">
+            <div role="region" aria-label="Saldo por item" tabIndex={0} className="overflow-x-auto rounded-xl border border-slate-200 p-2">
+            <table className="w-full min-w-[400px] text-sm">
               <thead>
                 <tr className="text-left text-slate-500">
                   <th className="py-1">Item</th>
@@ -222,6 +224,7 @@ export default function PedidoDetalhePage() {
                 ))}
               </tbody>
             </table>
+            </div>
             <p className="mt-2 text-xs text-slate-500">
               Aberto total: <strong>{closing.missingQty}</strong> · Avarias:{" "}
               <strong>{closing.damagedQty}</strong> · Bons: <strong>{closing.goodQty}</strong>
@@ -232,9 +235,9 @@ export default function PedidoDetalhePage() {
             <Link href={`/pedidos/${order.id}/retorno`}>
               <Button>Registrar devolução</Button>
             </Link>
-            <Link href={`/pedidos/${order.id}/fechamento`}>
+            {!isOperator && <Link href={`/pedidos/${order.id}/fechamento`}>
               <Button variant="secondary">Revisar e encerrar</Button>
-            </Link>
+            </Link>}
           </div>
         </>
       )}
@@ -294,7 +297,7 @@ export default function PedidoDetalhePage() {
             )}
           </div>
 
-          {data.order.billingStatus === "pendente" && (
+          {!isOperator && data.order.billingStatus === "pendente" && (
             <div className="grid grid-cols-2 gap-2">
               <Button variant="secondary" disabled={busy} onClick={() => setBilling("recebida")}>
                 Marcar recebida
@@ -305,7 +308,7 @@ export default function PedidoDetalhePage() {
             </div>
           )}
 
-          <div className="grid gap-2 pt-2">
+          {!isOperator && <div className="grid gap-2 pt-2">
             <Button variant="ghost" onClick={() => setShowAdjust((v) => !v)}>
               Ajustar cobrança…
             </Button>
@@ -345,7 +348,7 @@ export default function PedidoDetalhePage() {
                 </Button>
               </Card>
             )}
-          </div>
+          </div>}
         </Card>
       )}
 
